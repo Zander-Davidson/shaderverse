@@ -4,14 +4,14 @@
 
 import type { LayoutConfig } from '../cockpit/layout';
 import type { StdFunction } from '../shader/stdlib';
-import { drawScreenBackdrop, drawScreenGlare } from '../style/screen';
+import { drawScreenBackdrop, drawScreenGlare, PHOSPHOR } from '../style/screen';
 import { COLORS, MONO, SANS } from '../theme';
 import { CanvasPanel } from './panel';
 import { PanelShape } from './shape';
 
 const PLANE_BG = '#04070a';
-const GRID = 'rgba(140, 170, 190, 0.09)';
-const AXES = '#9fb3c2';
+const GRID = 'rgba(63, 242, 196, 0.07)';
+const AXES = '#8fb8ad';
 const PAD = 14;
 /** Texels per wall unit, matching the code panel. */
 const PX_PER_UNIT = 280;
@@ -119,7 +119,7 @@ export class PlotPanel extends CanvasPanel {
       ctx.fillStyle = 'rgba(4, 7, 10, 0.82)';
       ctx.fillRect(x0 + 10, y0 + 10, Math.max(nameW, formW) + 36, 110);
       ctx.font = `700 40px ${MONO}`;
-      ctx.fillStyle = COLORS.accent;
+      ctx.fillStyle = PHOSPHOR;
       ctx.fillText(fn.name, x0 + 28, y0 + 24);
       ctx.font = `500 34px ${SANS}`;
       ctx.fillStyle = COLORS.text;
@@ -168,9 +168,9 @@ export class PlotPanel extends CanvasPanel {
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.save();
-    ctx.shadowColor = COLORS.accent;
+    ctx.shadowColor = PHOSPHOR;
     ctx.shadowBlur = 24;
-    ctx.strokeStyle = COLORS.accent;
+    ctx.strokeStyle = PHOSPHOR;
     ctx.lineWidth = 6;
     ctx.stroke();
     ctx.restore();

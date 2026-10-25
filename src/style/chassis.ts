@@ -12,6 +12,9 @@ import type { Rect } from '../cockpit/layout';
 /** How far the chassis stands in front of its screen, in world units. */
 export const CHASSIS_DEPTH = 0.07;
 
+/** Wall units the metal's light-to-dark sweep spans, the same on every panel. */
+const SWEEP_UNITS = 8;
+
 export interface ChassisStyle {
   /** Base metal, dark to light. */
   metal: [string, string, string];
@@ -26,6 +29,23 @@ export const GUNMETAL: ChassisStyle = {
   glow: '#3ff2c4',
   iridescence: 0.55,
 };
+
+/**
+ * The chassis metal as a plain material, for the cockpit's other hardware
+ * (knobs, tubing, the portal bezel), so everything reads as one finish.
+ */
+export function gunmetalMaterial(style: ChassisStyle = GUNMETAL): THREE.MeshPhysicalMaterial {
+  return physicalMaterial({
+    color: '#4a6168',
+    metalness: 0.92,
+    roughness: 0.3,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.18,
+    iridescence: style.iridescence,
+    iridescenceIOR: 1.35,
+    iridescenceThicknessRange: [180, 520],
+  });
+}
 
 /** The screen opening inside an outer silhouette, `bezel` pixels in. */
 export function screenShapeFor(outer: PanelShape, bezel: number): PanelShape {
@@ -133,10 +153,11 @@ export class Chassis {
   build(rect: Rect, radius: number, screenInset: number, outer: PanelShape, bezel: number): void {
     this.mesh.geometry.dispose();
     this.mesh.geometry = spherePatchGeometry(rect.x, rect.y, rect.w, rect.h, radius, screenInset + CHASSIS_DEPTH);
-    this.paint(outer, bezel);
+    this.paint(outer, bezel, (outer.width / rect.w) * SWEEP_UNITS);
   }
 
-  private paint(outer: PanelShape, bezel: number) {
+  /** `sweep`: panel pixels the metal gradient spans. */
+  private paint(outer: PanelShape, bezel: number, sweep: number) {
     const s = this.scale;
     const W = Math.round(outer.width * s);
     const H = Math.round(outer.height * s);
@@ -147,7 +168,7 @@ export class Chassis {
     const screen = screenShapeFor(outer, bezel);
     const pins = rivets(outer, bezel);
     this.paintHeight(outer, screen, bezel, pins);
-    this.paintColor(outer, screen, bezel, pins);
+    this.paintColor(outer, screen, bezel, pins, sweep);
     this.bakeNormals();
     this.colorTex.needsUpdate = true;
     this.normalTex.needsUpdate = true;
@@ -192,7 +213,7 @@ export class Chassis {
     }
   }
 
-  private paintColor(outer: PanelShape, screen: PanelShape, bezel: number, pins: { x: number; y: number }[]) {
+  private paintColor(outer: PanelShape, screen: PanelShape, bezel: number, pins: { x: number; y: number }[], sweep: number) {
     const ctx = this.color.getContext('2d')!;
     const s = this.scale;
     const W = this.color.width;
@@ -201,8 +222,10 @@ export class Chassis {
     const [dark, mid, light] = this.style.metal;
     ctx.save();
     clipRegion(ctx, outer, s);
-    // Metal with a soft top-left key and brushed streaks.
-    const g = ctx.createLinearGradient(0, 0, W * 0.35, H);
+    // Metal with a soft top-left key and brushed streaks. The sweep has a
+    // fixed size in the wall, so small panels aren't all highlight.
+    const L = sweep * s;
+    const g = ctx.createLinearGradient(0, 0, L * 0.35 * (W / H), L);
     g.addColorStop(0, light);
     g.addColorStop(0.18, mid);
     g.addColorStop(0.6, dark);

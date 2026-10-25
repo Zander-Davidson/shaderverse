@@ -14,9 +14,9 @@ import type { LayoutConfig } from '../cockpit/layout';
 import { columnOf, offsetAt, TAB_SIZE } from '../editor/grid';
 import { isMac, type EditorSession } from '../editor/session';
 import type { ProjectStore } from '../project/store';
-import { functionAt, type FunctionHit } from '../source/functions';
+import { functionAt, interactiveTokens, type FunctionHit } from '../source/functions';
 import { tokenize, type TokenType } from '../source/tokenizer';
-import { COLORS, KNOB_TINTS, MONO } from '../theme';
+import { COLORS, KNOB_TINT, MONO } from '../theme';
 import { CanvasPanel, type PanelPointerEvent } from './panel';
 import { PanelShape } from './shape';
 import { drawScreenBackdrop, drawScreenGlare } from '../style/screen';
@@ -36,6 +36,8 @@ const BEZEL = Math.round(0.2 * PX_PER_UNIT);
 interface Segment {
   text: string;
   type: TokenType;
+  /** Glow color for something interactive: a knob-able number or a plottable call. */
+  glow?: string;
 }
 
 const TOKEN_COLORS: Record<TokenType, string> = {
@@ -244,11 +246,14 @@ export class CodePanel extends CanvasPanel {
   private splitLines(src: string): Segment[][] {
     if (src === this.linesFor) return this.lines;
     const lines: Segment[][] = [[]];
+    const interactive = interactiveTokens(src);
     for (const t of tokenize(src)) {
+      const kind = interactive.get(t.start);
+      const glow = kind === 'knob' ? COLORS.knobGlow : kind === 'plot' ? COLORS.plotGlow : undefined;
       const parts = t.text.split('\n');
       parts.forEach((part, i) => {
         if (i > 0) lines.push([]);
-        if (part) lines[lines.length - 1]!.push({ text: part, type: t.type });
+        if (part) lines[lines.length - 1]!.push({ text: part, type: t.type, glow });
       });
     }
     this.lines = lines;
@@ -263,7 +268,7 @@ export class CodePanel extends CanvasPanel {
     const text = this.text;
     const editing = this.editing;
     const lines = this.splitLines(text);
-    const tints = new Map(project.knobs.filter((k) => k.slot >= 0).map((k) => [k.param, KNOB_TINTS[k.slot % KNOB_TINTS.length]!]));
+    const knobParams = new Set(project.knobs.filter((k) => k.slot >= 0).map((k) => k.param));
     const errorLines = new Map<number, string>();
     if (compile.source === text) {
       for (const e of compile.errors) if (e.line !== null && !errorLines.has(e.line)) errorLines.set(e.line, e.message);
@@ -380,15 +385,25 @@ export class CodePanel extends CanvasPanel {
         endX = x + w;
         if (endX < TEXT_X) continue;
         if (x > W) break;
-        const tint = seg.type === 'identifier' ? tints.get(seg.text) : undefined;
-        if (tint) {
-          ctx.fillStyle = `${tint}30`;
+        const isKnob = seg.type === 'identifier' && knobParams.has(seg.text);
+        if (isKnob) {
+          ctx.fillStyle = `${KNOB_TINT}30`;
           ctx.fillRect(x - 2, y + 4, w + 4, CODE_LINE_PX - 8);
-          ctx.fillStyle = tint;
+        }
+        const glow = isKnob ? KNOB_TINT : seg.glow;
+        if (seg.type === 'whitespace') continue;
+        if (glow) {
+          // Interactive: bright, with a glow, against the muted syntax colors.
+          ctx.save();
+          ctx.shadowColor = glow;
+          ctx.shadowBlur = 14;
+          ctx.fillStyle = glow;
+          ctx.fillText(shown, x, mid + 1);
+          ctx.restore();
         } else {
           ctx.fillStyle = TOKEN_COLORS[seg.type];
+          ctx.fillText(shown, x, mid + 1);
         }
-        if (seg.type !== 'whitespace') ctx.fillText(shown, x, mid + 1);
       }
       ctx.restore();
 
@@ -427,7 +442,7 @@ export class CodePanel extends CanvasPanel {
       const i = text.slice(0, from).split('\n').length - 1 - first;
       if (i >= 0 && i < visible) {
         const x0 = colX(columnOf(lineText, from - start));
-        ctx.fillStyle = COLORS.accent;
+        ctx.fillStyle = COLORS.plotGlow;
         ctx.fillRect(x0, top + (i + 1) * CODE_LINE_PX - 5, colX(columnOf(lineText, to - start)) - x0, 3);
       }
     }

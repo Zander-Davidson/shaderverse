@@ -3,6 +3,7 @@
 // to uniforms only: turning a knob never recompiles.
 
 import * as THREE from 'three';
+import { gunmetalMaterial } from '../style/chassis';
 import { physicalMaterial } from '../style/quality';
 import { knobSlotPosition, type LayoutConfig, type Rect } from '../cockpit/layout';
 import { CanvasPanel, redrawListenerRef, type PanelPointerEvent, type PointerTarget } from '../panels/panel';
@@ -11,7 +12,7 @@ const redrawListener = { call: (o: THREE.Object3D) => redrawListenerRef()?.(o) }
 import { wallToWorld } from '../panels/patch';
 import { KNOB_SLOTS, type KnobRecord } from '../project/schema';
 import type { ProjectStore } from '../project/store';
-import { COLORS, KNOB_TINTS, MONO } from '../theme';
+import { COLORS, KNOB_TINT, MONO } from '../theme';
 import { KnobTubes } from './tubes';
 
 /** Screen pixels of vertical drag for the full range; fine control divides by 10. */
@@ -105,7 +106,7 @@ class KnobFace extends CanvasPanel {
     // Ring just outside the cap; labels wrap around outside the ticks.
     const R = W * 0.3;
     const TEXT_R = W * 0.415;
-    const tint = KNOB_TINTS[this.slot % KNOB_TINTS.length]!;
+    const tint = KNOB_TINT;
     const k = this.knob;
     ctx.clearRect(0, 0, W, H);
 
@@ -187,16 +188,7 @@ class KnobCap {
 
   constructor(tint: string) {
     // Polished chrome with a faint thin-film sheen.
-    const chrome = physicalMaterial({
-      color: '#c9d6da',
-      metalness: 1,
-      roughness: 0.16,
-      clearcoat: 1,
-      clearcoatRoughness: 0.08,
-      iridescence: 0.45,
-      iridescenceIOR: 1.4,
-      iridescenceThicknessRange: [200, 600],
-    });
+    const chrome = gunmetalMaterial();
     const dark = physicalMaterial({ color: '#1b2427', metalness: 0.9, roughness: 0.38, clearcoat: 0.5 });
     // A lathed profile: wide skirt, waist, domed cap.
     const profile = [
@@ -255,7 +247,7 @@ export class KnobSlot implements PointerTarget {
     private readonly store: ProjectStore,
   ) {
     this.face = new KnobFace(cfg, slot);
-    this.cap = new KnobCap(KNOB_TINTS[slot % KNOB_TINTS.length]!);
+    this.cap = new KnobCap(KNOB_TINT);
     this.cap.place(cfg, slot);
     this.cap.setAssigned(false);
   }
@@ -304,7 +296,7 @@ export class KnobSlot implements PointerTarget {
 
   private setActive(active: boolean) {
     this.face.active = active;
-    this.cap.indicatorMat.color.set(active ? '#ffffff' : KNOB_TINTS[this.slot % KNOB_TINTS.length]!);
+    this.cap.indicatorMat.color.set(active ? '#ffffff' : KNOB_TINT);
     redrawListener.call(this.cap.group);
     this.face.invalidate();
   }
@@ -387,13 +379,13 @@ export class KnobBank {
         const was = !!s.knob;
         s.setKnob(k);
         if (was !== !!k) {
-          this.tubes.setActive(s.slot, !!k, KNOB_TINTS[s.slot % KNOB_TINTS.length]);
+          this.tubes.setActive(s.slot, !!k, KNOB_TINT);
           const g = this.tubes.tubeGroup(s.slot);
           if (g) redrawListener.call(g);
         }
       }
     };
-    for (let i = 0; i < KNOB_SLOTS; i++) this.tubes.setActive(i, false, KNOB_TINTS[i % KNOB_TINTS.length]);
+    for (let i = 0; i < KNOB_SLOTS; i++) this.tubes.setActive(i, false, KNOB_TINT);
     sync();
     store.subscribe((st, prev) => {
       if (st.project.knobs !== prev.project.knobs) sync();
@@ -403,7 +395,7 @@ export class KnobBank {
   relayout(cfg: LayoutConfig) {
     for (const s of this.slots) s.relayout(cfg);
     this.tubes.relayout(cfg);
-    for (const s of this.slots) this.tubes.setActive(s.slot, !!s.knob, KNOB_TINTS[s.slot % KNOB_TINTS.length]);
+    for (const s of this.slots) this.tubes.setActive(s.slot, !!s.knob, KNOB_TINT);
   }
 
   update(time = 0) {

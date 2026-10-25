@@ -2,7 +2,7 @@
 
 import type { ProjectStore } from '../project/store';
 import { formatValue } from '../knobs/knobs';
-import { KNOB_TINTS } from '../theme';
+import { KNOB_TINT } from '../theme';
 
 export class KnobPopover {
   readonly root: HTMLFormElement;
@@ -93,7 +93,7 @@ export class KnobPopover {
       return;
     }
     this.error.textContent = '';
-    this.root.style.setProperty('--tint', KNOB_TINTS[k.slot % KNOB_TINTS.length]!);
+    this.root.style.setProperty('--tint', KNOB_TINT);
     this.root.querySelector('.sv-pop-title')!.textContent = `KNOB ${k.slot + 1} · ${k.type.toUpperCase()}`;
     this.input('label').value = k.label;
     this.input('param').value = k.param;

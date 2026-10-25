@@ -151,6 +151,14 @@ export function startApp(root: HTMLElement): void {
     helpOverlay.hide();
   };
 
+  // Looking toward the panels the pointer is over: the source side or the
+  // readouts. Anywhere on the page counts, overlays included.
+  window.addEventListener('pointermove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    cockpit.setFocus(cockpit.sideAt(((e.clientX - r.left) / r.width) * 2 - 1));
+  });
+  document.documentElement.addEventListener('pointerleave', () => cockpit.setFocus(null));
+
   // Store → runtime
   const compile = () => {
     const source = store.getState().project.source;

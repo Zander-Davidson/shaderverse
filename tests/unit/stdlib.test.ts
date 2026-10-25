@@ -3,7 +3,7 @@ import { EXAMPLES } from '../../examples';
 import { exportBakedGlsl } from '../../src/project/persistence';
 import { LIBRARY, preludeFor, stdFunction } from '../../src/shader/stdlib';
 import { wrapShader } from '../../src/shader/wrapper';
-import { functionAt } from '../../src/source/functions';
+import { functionAt, interactiveTokens } from '../../src/source/functions';
 import { tokenize } from '../../src/source/tokenizer';
 
 describe('shader standard library', () => {
@@ -59,5 +59,18 @@ describe('functionAt', () => {
     expect(functionAt(src, src.lastIndexOf('reciprocal'))).toBeNull();
     expect(functionAt(src, src.indexOf('('))).toBeNull();
     expect(functionAt(src, 0)).toBeNull();
+  });
+});
+
+describe('interactiveTokens', () => {
+  it('marks knob-able numbers and plottable calls, nothing else', () => {
+    const src = 'const float K = 2.0;\nvoid mainImage(out vec4 c, in vec2 p) {\n  float r = sin(p.x * 3.0) + length(p);\n  c = vec4(r);\n}';
+    const marks = interactiveTokens(src);
+    expect(marks.get(src.indexOf('sin'))).toBe('plot');
+    expect(marks.get(src.indexOf('length'))).toBe('plot');
+    expect(marks.get(src.indexOf('3.0'))).toBe('knob');
+    // Outside mainImage: a constant, not a knob.
+    expect(marks.has(src.indexOf('2.0'))).toBe(false);
+    expect(marks.has(src.indexOf('vec4(r)'))).toBe(false);
   });
 });

@@ -13,7 +13,8 @@ import { basicSetup } from 'codemirror';
 import { EditorSession, isMac } from '../editor/session';
 import type { ScreenRect } from '../panels/bounds';
 import type { ProjectStore } from '../project/store';
-import { functionAt, type FunctionHit } from '../source/functions';
+import { functionAt, interactiveTokens, type FunctionHit } from '../source/functions';
+import { tokenize } from '../source/tokenizer';
 import { COLORS, MONO } from '../theme';
 
 /** Underlines the hovered library function name. */
@@ -30,6 +31,20 @@ const functionMarkField = StateField.define<DecorationSet>({
   },
   provide: (f) => EditorView.decorations.from(f),
 });
+
+/** Glows what can be interacted with: knob-able numbers and plottable calls. */
+const glowMarks = { knob: Decoration.mark({ class: 'sv-glow-knob' }), plot: Decoration.mark({ class: 'sv-glow-plot' }) };
+const interactiveField = StateField.define<DecorationSet>({
+  create: (state) => interactiveMarks(state.doc.toString()),
+  update: (marks, tr) => (tr.docChanged ? interactiveMarks(tr.state.doc.toString()) : marks),
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+function interactiveMarks(src: string): DecorationSet {
+  const tokens = new Map(tokenize(src).map((t) => [t.start, t.end]));
+  const ranges = [...interactiveTokens(src)].sort(([a], [b]) => a - b);
+  return Decoration.set(ranges.map(([from, kind]) => glowMarks[kind].range(from, tokens.get(from)!)));
+}
 
 export const highlight = HighlightStyle.define([
   { tag: [t.keyword, t.controlKeyword, t.modifier, t.operatorKeyword], color: COLORS.keyword },
@@ -61,7 +76,9 @@ const theme = EditorView.theme(
     '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: `underline wavy ${COLORS.error}` },
     '.cm-panels': { backgroundColor: '#0b1116', color: COLORS.text },
     '.cm-searchMatch': { backgroundColor: '#4fd1ff33' },
-    '.sv-fn-hover': { textDecoration: `underline 2px ${COLORS.accent}`, textUnderlineOffset: '3px' },
+    '.sv-glow-knob, .sv-glow-knob *': { color: `${COLORS.knobGlow} !important`, textShadow: `0 0 6px ${COLORS.knobGlow}` },
+    '.sv-glow-plot, .sv-glow-plot *': { color: `${COLORS.plotGlow} !important`, textShadow: `0 0 6px ${COLORS.plotGlow}` },
+    '.sv-fn-hover': { textDecoration: `underline 2px ${COLORS.plotGlow}`, textUnderlineOffset: '3px' },
   },
   { dark: true },
 );
@@ -106,6 +123,7 @@ export class EditorOverlay {
       theme,
       syntaxHighlighting(highlight),
       functionMarkField,
+      interactiveField,
     ]);
     this.session.subscribe((u) => {
       if (!u) this.renderHint();
