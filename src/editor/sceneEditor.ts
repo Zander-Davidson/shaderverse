@@ -96,8 +96,14 @@ export class SceneEditor {
     this.view.contentDOM.blur();
   }
 
-  /** Keeps the input layer over the panel, so IME windows open near it. */
+  /**
+   * Keeps the input layer over the panel, so IME windows open near it. Only
+   * while editing: it runs every frame the camera moves, and measuring the
+   * panel's screen bounds and restyling the layer is costly (Firefox halves
+   * its frame rate).
+   */
   position(): void {
+    if (!this.isOpen) return;
     const { code } = this.bounds();
     Object.assign(this.input.style, {
       left: `${code.left}px`,
