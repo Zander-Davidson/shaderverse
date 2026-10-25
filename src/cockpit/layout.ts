@@ -18,7 +18,12 @@ export interface LayoutConfig {
   fitHalfWidth: number;
   fitHalfHeight: number;
   portal: { x: number; y: number; size: number };
-  knobRing: { radius: number; size: number; startDeg: number };
+  /** Gap between the portal's bezel and the right-hand panels that wrap it. */
+  clearance: number;
+  /** Corner radius of panel silhouettes, in wall units. */
+  cornerRadius: number;
+  /** Knobs sit on an arc around the portal's left side, top to bottom. */
+  knobRing: { radius: number; size: number; startDeg: number; stepDeg: number };
   code: Rect;
   status: Rect;
   library: Rect;
@@ -29,18 +34,25 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   eyeDistance: 6,
   fitHalfWidth: 7.45,
   fitHalfHeight: 4.15,
-  portal: { x: 1.45, y: 0.15, size: 4.1 },
-  knobRing: { radius: 2.78, size: 0.98, startDeg: 90 },
-  code: { x: -4.55, y: 0, w: 5.5, h: 8.1 },
-  status: { x: 6.0, y: 2.05, w: 2.5, h: 3.9 },
-  library: { x: 6.0, y: -2.05, w: 2.5, h: 3.9 },
+  portal: { x: 2.2, y: 0.15, size: 4.1 },
+  clearance: 0.14,
+  cornerRadius: 0.38,
+  // Nearly touching: neighbors are ~0.93 apart for 0.9-wide knobs.
+  knobRing: { radius: 2.9, size: 0.9, startDeg: 115, stepDeg: 18.5 },
+  // Room between the source and the knobs for the knob tubing.
+  code: { x: -4.85, y: 0, w: 4.9, h: 8.1 },
+  status: { x: 5.6, y: 2.06, w: 3.3, h: 3.88 },
+  library: { x: 5.6, y: -2.06, w: 3.3, h: 3.88 },
 };
 
 export const layout: LayoutConfig = structuredClone(DEFAULT_LAYOUT);
 
-/** Wall coordinates of knob slot `i` of `count`, clockwise from the top. */
-export function knobSlotPosition(cfg: LayoutConfig, i: number, count: number): { x: number; y: number } {
-  const a = ((cfg.knobRing.startDeg - (360 / count) * i) * Math.PI) / 180;
+/** Outer radius of the portal's chrome bezel, in wall units. */
+export const bezelRadius = (cfg: LayoutConfig) => (cfg.portal.size / 2) * 1.15 + 0.04;
+
+/** Wall coordinates of knob slot `i`, down the arc on the portal's left. */
+export function knobSlotPosition(cfg: LayoutConfig, i: number, _count: number): { x: number; y: number } {
+  const a = ((cfg.knobRing.startDeg + cfg.knobRing.stepDeg * i) * Math.PI) / 180;
   return {
     x: cfg.portal.x + Math.cos(a) * cfg.knobRing.radius,
     y: cfg.portal.y + Math.sin(a) * cfg.knobRing.radius,

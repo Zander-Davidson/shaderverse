@@ -24,13 +24,15 @@ export class PointerRouter {
   private captured: PointerTarget | null = null;
   private hovered: PointerTarget | null = null;
   private lastHit: Hit | null = null;
-  /** Called on any pointer down that misses an overlay; overlays close on it. */
-  onCanvasDown: (() => void) | null = null;
+  /** Called on every canvas pointer down with the hit target; overlays close on it. */
+  onCanvasDown: ((target: PointerTarget | null) => void) | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly camera: THREE.Camera,
   ) {
+    // The portal renders on its own layer; picking still sees it.
+    this.raycaster.layers.enableAll();
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     canvas.addEventListener('pointermove', (e) => this.onMove(e));
     canvas.addEventListener('pointerup', (e) => this.onUp(e));
@@ -60,7 +62,12 @@ export class PointerRouter {
     const hits = this.raycaster.intersectObjects(meshes, true);
     for (const h of hits) {
       const target = this.targets.find((t) => t.meshes.some((m) => isWithin(h.object, m)));
-      if (target && h.uv) return { target, u: h.uv.x, v: h.uv.y };
+      if (!target || !h.uv) continue;
+      if (target.hitTest) {
+        const px = uvToPixel(h.uv.x, h.uv.y, target.pixelWidth, target.pixelHeight);
+        if (!target.hitTest(px.x, px.y)) continue;
+      }
+      return { target, u: h.uv.x, v: h.uv.y };
     }
     return null;
   }
@@ -104,8 +111,8 @@ export class PointerRouter {
 
   private onDown(e: PointerEvent) {
     if (!this.enabled) return;
-    this.onCanvasDown?.();
     const hit = this.pick(e);
+    this.onCanvasDown?.(hit?.target ?? null);
     this.lastHit = hit;
     if (!hit) return;
     if (this.route('down', e, hit)) {

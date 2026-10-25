@@ -4,16 +4,20 @@
 import * as THREE from 'three';
 import { EXAMPLES } from '../examples';
 import { layout, type LayoutConfig } from './cockpit/layout';
+import { Compositor } from './cockpit/compositor';
 import { Cockpit } from './cockpit/scene';
 import { KnobBank } from './knobs/knobs';
 import { showBoot } from './overlays/boot';
+import { SceneEditor } from './editor/sceneEditor';
 import { EditorOverlay } from './overlays/editor';
 import { HelpOverlay, toast } from './overlays/help';
 import { KnobPopover } from './overlays/popover';
 import { screenBounds, screenPoint, type ScreenRect } from './panels/bounds';
 import { CodePanel } from './panels/code';
+import { wallToWorld } from './panels/patch';
+import { onPanelRedraw } from './panels/panel';
 import { PointerRouter } from './panels/pointer';
-import { PortalPanel, PortalRim } from './panels/portal';
+import { PortalBezel, PortalPanel, PortalRim } from './panels/portal';
 import { LibraryPanel, StatusPanel, type LibraryActions } from './panels/status';
 import {
   autosave,
@@ -26,20 +30,27 @@ import {
 } from './project/persistence';
 import { createProjectStore } from './project/store';
 import { ShaderRuntime, type Quality } from './shader/runtime';
+import { LOW_GFX } from './style/quality';
 
 export function startApp(root: HTMLElement): void {
   const canvas = document.createElement('canvas');
   canvas.className = 'sv-canvas';
-  if (!canvas.getContext('webgl2', { antialias: true })) {
+  // Probe on a throwaway canvas: the first getContext fixes the attributes.
+  if (!document.createElement('canvas').getContext('webgl2')) {
     fatal(root, 'WebGL2 is not available', 'SHADERVERSE needs WebGL2. Try a current version of Chrome, Firefox or Safari, and check that hardware acceleration is enabled.');
     return;
   }
   root.appendChild(canvas);
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // No MSAA on the canvas: the compositor's cached cockpit is antialiased (or,
+  // at high pixel ratios, fine enough without), and the canvas only receives
+  // a full-screen copy plus the portal.
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+  const maxDpr = LOW_GFX ? 1 : 2;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDpr));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setClearColor('#020304', 1);
   // Compile errors are reported by our own validator; don't spam the console.
   renderer.debug.checkShaderErrors = false;
 
@@ -53,10 +64,18 @@ export function startApp(root: HTMLElement): void {
 
   const cfg: LayoutConfig = layout;
   const cockpit = new Cockpit(cfg);
+  cockpit.setEnvironment(renderer);
   cockpit.fit(window.innerWidth / window.innerHeight);
   const portal = new PortalPanel(runtime, cfg);
   const rim = new PortalRim(cfg);
-  const code = new CodePanel(cfg, store);
+  const bezel = new PortalBezel(cfg);
+  // The curved panel is the editor; ?editor=overlay restores the flat window.
+  const useOverlay = new URLSearchParams(location.search).get('editor') === 'overlay';
+  const editor: SceneEditor | EditorOverlay = useOverlay
+    ? new EditorOverlay(store, () => overlayBounds())
+    : new SceneEditor(store, () => overlayBounds());
+  const code = new CodePanel(cfg, store, editor instanceof SceneEditor ? editor.session : null);
+  if (editor instanceof SceneEditor) editor.setTarget(code);
   const status = new StatusPanel(cfg, store, runtime);
   const helpOverlay = new HelpOverlay();
   const libraryActions: LibraryActions = {
@@ -90,7 +109,7 @@ export function startApp(root: HTMLElement): void {
   const library = new LibraryPanel(cfg, store, libraryActions);
   const knobs = new KnobBank(cfg, store);
 
-  cockpit.scene.add(rim.mesh, portal.mesh, code.mesh, status.mesh, library.mesh, knobs.group);
+  cockpit.scene.add(code.caret, portal.hole, bezel.group, knobs.tubes.group, rim.mesh, portal.mesh, code.mesh, status.mesh, library.mesh, knobs.group);
   const aniso = renderer.capabilities.getMaxAnisotropy();
   for (const p of [rim, code, status, library]) p.setAnisotropy(aniso);
   knobs.setAnisotropy(aniso);
@@ -110,14 +129,19 @@ export function startApp(root: HTMLElement): void {
     for (const s of knobs.slots) p.left = Math.min(p.left, screenBounds(s.face.mesh, cockpit.camera, canvas).left);
     return { code: c, portal: p };
   };
-  const editor = new EditorOverlay(store, overlayBounds);
   const popover = new KnobPopover(store, (id) => {
     const k = store.getState().project.knobs.find((x) => x.id === id);
     const slot = k && knobs.slots[k.slot];
     return slot ? screenPoint(slot.anchor(), cockpit.camera, canvas) : null;
   });
-  router.onCanvasDown = () => {
-    editor.close();
+  portal.onClick = () => {
+    const s = store.getState();
+    s.dispatch({ type: 'setLean', lean: !s.ui.lean });
+  };
+  router.onCanvasDown = (target) => {
+    // Clicking empty space while leaned in sits back.
+    if (!target && store.getState().ui.lean) store.getState().dispatch({ type: 'setLean', lean: false });
+    if (!editor.ownsCanvasTarget(target)) editor.close();
     popover.close();
     helpOverlay.hide();
   };
@@ -141,6 +165,7 @@ export function startApp(root: HTMLElement): void {
       runtime.setQuality(s.project.playback.quality);
     }
     if (s.ui.restartCount !== prev.ui.restartCount) runtime.restart();
+    if (s.ui.lean !== prev.ui.lean) cockpit.setLean(s.ui.lean);
     if (s.project.id !== prev.project.id) runtime.restart();
   });
 
@@ -156,6 +181,11 @@ export function startApp(root: HTMLElement): void {
       return;
     }
     const s = store.getState();
+    if (e.key === 'Escape' && !helpOverlay.isOpen && s.ui.lean) {
+      s.dispatch({ type: 'setLean', lean: false });
+      e.preventDefault();
+      return;
+    }
     switch (e.key) {
       case ' ':
         s.dispatch({ type: 'setPlayback', playing: !s.project.playback.playing });
@@ -195,11 +225,17 @@ export function startApp(root: HTMLElement): void {
     e.preventDefault();
   });
 
+  // The cockpit renders through the compositor; changed panels mark their
+  // screen regions for re-rendering.
+  const compositor = new Compositor(renderer, cockpit.scene, cockpit.camera);
+  onPanelRedraw((obj) => compositor.markObject(obj));
+
   // Resize
   const resize = () => {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDpr));
     renderer.setSize(window.innerWidth, window.innerHeight);
     cockpit.fit(window.innerWidth / window.innerHeight);
+    compositor.resize();
     editor.position();
   };
   window.addEventListener('resize', resize);
@@ -213,6 +249,7 @@ export function startApp(root: HTMLElement): void {
   });
   canvas.addEventListener('webglcontextrestored', () => {
     contextLost = false;
+    compositor.resize();
     runtime.recompile(store.getState().project.source);
     for (const p of [rim, code, status, library]) p.invalidate();
     for (const s of knobs.slots) s.face.invalidate();
@@ -230,13 +267,19 @@ export function startApp(root: HTMLElement): void {
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
     status.fps = fps;
     status.tick(now);
+    code.tick(now);
+    if (cockpit.update(dt)) {
+      // The camera moved: everything on screen changed.
+      compositor.markAll();
+      editor.position();
+    }
     runtime.render(dt);
     rim.update();
     code.update();
     status.update();
     library.update();
-    knobs.update();
-    renderer.render(cockpit.scene, cockpit.camera);
+    knobs.update(now / 1000);
+    compositor.render();
   };
   requestAnimationFrame(frame);
 
@@ -245,11 +288,13 @@ export function startApp(root: HTMLElement): void {
     cockpit.fit(window.innerWidth / window.innerHeight);
     portal.rebuild(cfg);
     rim.relayout(cfg);
+    bezel.relayout(cfg);
     code.relayout(cfg);
     status.relayout(cfg);
     library.relayout(cfg);
     knobs.relayout(cfg);
     editor.position();
+    compositor.markAll();
   };
 
   if (import.meta.env.DEV) {
@@ -261,9 +306,17 @@ export function startApp(root: HTMLElement): void {
   // Handles for browser tests and debugging; not part of any public API.
   Object.assign(window, {
     __sv: {
-      store, runtime, router, cockpit, code, portal, knobs, editor, popover, canvas, renderer, relayout, cfg,
+      store, runtime, router, cockpit, code, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
       knobPoint: (slot: number) => screenPoint(knobs.slots[slot]!.anchor(), cockpit.camera, canvas),
       bounds: overlayBounds,
+      /** Screen point of a source offset on the curved code panel. */
+      codePoint: (pos: number) => {
+        const px = code.pixelOf(pos);
+        const r = code.rect;
+        const wx = r.x + (px.x / code.pixelWidth - 0.5) * r.w;
+        const wy = r.y + (0.5 - px.y / code.pixelHeight) * r.h;
+        return screenPoint(wallToWorld(wx, wy, cfg.radius, 0.01), cockpit.camera, canvas);
+      },
     },
   });
 }

@@ -4,6 +4,8 @@
 import * as THREE from 'three';
 import type { Rect } from '../cockpit/layout';
 import { spherePatchGeometry } from './patch';
+import type { PanelShape } from './shape';
+import { Chassis, screenShapeFor } from '../style/chassis';
 
 export type PanelPointerKind = 'down' | 'move' | 'up' | 'wheel' | 'hover' | 'leave' | 'dblclick' | 'contextmenu';
 
@@ -36,6 +38,8 @@ export interface PointerTarget {
   /** Return true to capture the pointer until 'up'. */
   onPointer(e: PanelPointerEvent): boolean | void;
   cursorAt?(x: number, y: number): string;
+  /** False for pixels outside the panel's silhouette; the pick passes through. */
+  hitTest?(x: number, y: number): boolean;
 }
 
 export interface Button {
@@ -45,6 +49,14 @@ export interface Button {
   w: number;
   h: number;
 }
+
+/** Called after any panel redraws its texture (the compositor marks it dirty). */
+let redrawListener: ((mesh: THREE.Object3D) => void) | null = null;
+export function onPanelRedraw(fn: ((mesh: THREE.Object3D) => void) | null): void {
+  redrawListener = fn;
+}
+/** The current listener, for other scene objects that change (knob caps). */
+export const redrawListenerRef = () => redrawListener;
 
 export abstract class CanvasPanel implements PointerTarget {
   readonly canvas: HTMLCanvasElement;
@@ -71,7 +83,9 @@ export abstract class CanvasPanel implements PointerTarget {
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.minFilter = THREE.LinearMipmapLinearFilter;
     this.texture.generateMipmaps = true;
-    this.material = new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, toneMapped: false });
+    // alphaTest discards fully transparent pixels, so a panel's empty corners
+    // don't write depth and hide what's behind them.
+    this.material = new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, alphaTest: 0.01, toneMapped: false });
     this.mesh = new THREE.Mesh(this.geometryFor(radius), this.material);
   }
 
@@ -93,6 +107,7 @@ export abstract class CanvasPanel implements PointerTarget {
 
   setAnisotropy(n: number): void {
     this.texture.anisotropy = n;
+    this.chassis?.setAnisotropy(n);
   }
 
   invalidate(): void {
@@ -106,12 +121,14 @@ export abstract class CanvasPanel implements PointerTarget {
     this.buttons = [];
     this.draw(this.ctx);
     this.texture.needsUpdate = true;
+    redrawListener?.(this.mesh);
   }
 
   protected abstract draw(ctx: CanvasRenderingContext2D): void;
 
+  /** Registers a button drawn at screen-relative coordinates. */
   protected addButton(b: Button): void {
-    this.buttons.push(b);
+    this.buttons.push({ ...b, x: b.x + this.ox, y: b.y + this.oy });
   }
 
   protected buttonAt(x: number, y: number): Button | undefined {
@@ -136,5 +153,55 @@ export abstract class CanvasPanel implements PointerTarget {
 
   cursorAt(x: number, y: number): string {
     return this.buttonAt(x, y) ? 'pointer' : 'default';
+  }
+
+  /** The screen opening content is drawn in (the whole silhouette without a chassis). */
+  shape: PanelShape | null = null;
+  /** The outer silhouette, chassis included. */
+  outerShape: PanelShape | null = null;
+  chassis: Chassis | null = null;
+
+  hitTest(x: number, y: number): boolean {
+    const s = this.outerShape ?? this.shape;
+    return s ? s.contains(x, y) : true;
+  }
+
+  /** Screen origin in panel pixels: content is drawn relative to it. */
+  get ox(): number {
+    return this.chassis ? this.shape!.inset : 0;
+  }
+
+  get oy(): number {
+    return this.ox;
+  }
+
+  /** Width and height of the screen area content is laid out in. */
+  get iw(): number {
+    return this.pixelWidth - 2 * this.ox;
+  }
+
+  get ih(): number {
+    return this.pixelHeight - 2 * this.oy;
+  }
+
+  /**
+   * Gives the panel a raised chrome chassis around a recessed screen. Content
+   * then lays out in the screen opening, `bezel` pixels inside `outer`.
+   */
+  setChassis(outer: PanelShape, bezel: number, radius: number): void {
+    this.outerShape = outer;
+    this.shape = screenShapeFor(outer, bezel);
+    if (!this.chassis) {
+      this.chassis = new Chassis();
+      // Picking goes through the screen mesh, which has the same layout.
+      this.chassis.mesh.raycast = () => {};
+      this.mesh.add(this.chassis.mesh);
+      // The screen is fully covered at its edges by the chassis lip, so it
+      // can be opaque: drawn front to back, it hides what's behind it early.
+      this.material.transparent = false;
+      this.material.alphaTest = 0.5;
+      this.material.needsUpdate = true;
+    }
+    this.chassis.build(this.rect, radius, this.inset, outer, bezel);
   }
 }

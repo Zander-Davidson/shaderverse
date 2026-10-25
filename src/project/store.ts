@@ -28,6 +28,7 @@ export type Action =
   | { type: 'setCodeScroll'; line: number }
   | { type: 'openPopover'; id: string }
   | { type: 'closePopover' }
+  | { type: 'setLean'; lean: boolean }
   | { type: 'loadProject'; project: Project };
 
 export interface LogEntry {
@@ -55,6 +56,8 @@ export interface AppState {
     codeScrollLine: number;
     /** Incremented by `restart` so the runtime can react. */
     restartCount: number;
+    /** Camera leaned in so the portal and knobs fill the view. */
+    lean: boolean;
   };
   log: LogEntry[];
   dispatch: (action: Action, actor?: Actor) => ActionResult;
@@ -190,7 +193,8 @@ export function createProjectStore(initial: Project) {
           return OK;
 
         case 'openEditor':
-          set({ ui: { ...s.ui, editorOpen: true, popoverKnobId: null } });
+          // The code panel is out of view when leaned in.
+          set({ ui: { ...s.ui, editorOpen: true, popoverKnobId: null, lean: false } });
           return OK;
 
         case 'closeEditor':
@@ -208,6 +212,11 @@ export function createProjectStore(initial: Project) {
 
         case 'closePopover':
           set({ ui: { ...s.ui, popoverKnobId: null } });
+          return OK;
+
+        case 'setLean':
+          if (action.lean === s.ui.lean) return OK;
+          set({ ui: { ...s.ui, lean: action.lean, editorOpen: action.lean ? false : s.ui.editorOpen, popoverKnobId: null } });
           return OK;
 
         case 'loadProject':
@@ -229,7 +238,7 @@ export function createProjectStore(initial: Project) {
     return {
       ...withSource(initial, initial.source),
       compile: { status: 'pending', errors: [], source: initial.source },
-      ui: { editorOpen: false, popoverKnobId: null, codeScrollLine: 0, restartCount: 0 },
+      ui: { editorOpen: false, popoverKnobId: null, codeScrollLine: 0, restartCount: 0, lean: false },
       log: [],
       setCompile: (compile) => set({ compile }),
       dispatch: (action, actor = 'user') => {
@@ -244,6 +253,7 @@ export function createProjectStore(initial: Project) {
           last.actor === actor &&
           last.action.type === action.type &&
           (action.type === 'setSource' ||
+            action.type === 'setCodeScroll' ||
             (action.type === 'setKnobValue' && (last.action as { id: string }).id === action.id));
         const next = coalesce ? [...log.slice(0, -1), entry] : [...log, entry];
         const patch: Partial<AppState> = { log: next.slice(-LOG_LIMIT) };

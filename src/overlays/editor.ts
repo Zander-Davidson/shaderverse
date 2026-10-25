@@ -1,27 +1,19 @@
 // Flat CodeMirror editor that lifts forward over the code display. It never
-// covers the portal. Knobs are created here from a selected literal.
+// covers the portal. Kept as an alternative to the in-scene editor
+// (?editor=overlay); the editing logic lives in EditorSession.
 
 import { cpp } from '@codemirror/lang-cpp';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { setDiagnostics, type Diagnostic } from '@codemirror/lint';
-import { Annotation, EditorState } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
+import { EditorSession, isMac } from '../editor/session';
 import type { ScreenRect } from '../panels/bounds';
-import { KNOB_SLOTS } from '../project/schema';
 import type { ProjectStore } from '../project/store';
-import { checkLiteral } from '../source/literals';
-import { analyze } from '../source/mainImage';
-import { createKnobRewrite } from '../source/rewrite';
-import { COLORS, KNOB_TINTS, MONO } from '../theme';
+import { COLORS, MONO } from '../theme';
 
-/** Marks transactions that came from the store, so they aren't echoed back. */
-const fromStore = Annotation.define<boolean>();
-
-export const SOURCE_DEBOUNCE_MS = 120;
-
-const highlight = HighlightStyle.define([
+export const highlight = HighlightStyle.define([
   { tag: [t.keyword, t.controlKeyword, t.modifier, t.operatorKeyword], color: COLORS.keyword },
   { tag: [t.typeName, t.standard(t.typeName)], color: COLORS.type },
   { tag: [t.number, t.bool], color: COLORS.number },
@@ -57,13 +49,9 @@ const theme = EditorView.theme(
 
 export class EditorOverlay {
   readonly root: HTMLDivElement;
-  readonly view: EditorView;
+  readonly session: EditorSession;
   private readonly hint: HTMLDivElement;
   private readonly knobButton: HTMLButtonElement;
-  private timer: ReturnType<typeof setTimeout> | undefined;
-  private hintTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Set while this editor is the one changing the store's source. */
-  private pushing = false;
 
   constructor(
     private readonly store: ProjectStore,
@@ -87,28 +75,18 @@ export class EditorOverlay {
     this.knobButton.type = 'button';
     this.knobButton.hidden = true;
     this.knobButton.addEventListener('mousedown', (e) => e.preventDefault());
-    this.knobButton.addEventListener('click', () => this.createKnob());
+    this.knobButton.addEventListener('click', () => this.session.createKnob());
     this.root.appendChild(this.knobButton);
 
-    this.view = new EditorView({
-      parent: this.root.querySelector('.sv-editor-body')!,
-      state: EditorState.create({
-        doc: store.getState().project.source,
-        extensions: [
-          keymap.of([
-            { key: 'Mod-k', preventDefault: true, run: () => (this.createKnob(), true) },
-            { key: 'Escape', run: () => (this.close(), true) },
-          ]),
-          basicSetup,
-          cpp(),
-          theme,
-          syntaxHighlighting(highlight),
-          EditorView.updateListener.of((u) => {
-            if (u.docChanged && !u.transactions.some((tr) => tr.annotation(fromStore))) this.scheduleSource();
-            if (u.selectionSet || u.docChanged || u.geometryChanged) this.updateKnobButton();
-          }),
-        ],
-      }),
+    this.session = new EditorSession(store, this.root.querySelector('.sv-editor-body')!, [
+      basicSetup,
+      cpp(),
+      theme,
+      syntaxHighlighting(highlight),
+    ]);
+    this.session.subscribe((u) => {
+      if (!u) this.renderHint();
+      else if (u.selectionSet || u.docChanged || u.geometryChanged) this.updateKnobButton();
     });
 
     store.subscribe((s, prev) => {
@@ -116,7 +94,6 @@ export class EditorOverlay {
         if (s.ui.editorOpen) this.show();
         else this.hide();
       }
-      if (s.project.source !== prev.project.source && !this.timer && !this.pushing) this.pullSource();
       if (s.compile !== prev.compile || s.project.source !== prev.project.source) this.showDiagnostics();
     });
 
@@ -124,10 +101,14 @@ export class EditorOverlay {
     document.addEventListener('pointerdown', (e) => {
       if (!this.root.hidden && !this.root.contains(e.target as Node) && !(e.target instanceof HTMLCanvasElement)) {
         const el = e.target as HTMLElement;
-        if (!el.closest('.sv-popover')) this.close();
+        if (!el.closest('.sv-popover')) this.session.close();
       }
     });
     window.addEventListener('resize', () => this.position());
+  }
+
+  get view(): EditorView {
+    return this.session.view;
   }
 
   get isOpen(): boolean {
@@ -135,7 +116,16 @@ export class EditorOverlay {
   }
 
   close(): void {
-    if (this.store.getState().ui.editorOpen) this.store.getState().dispatch({ type: 'closeEditor' });
+    this.session.close();
+  }
+
+  createKnob(): boolean {
+    return this.session.createKnob();
+  }
+
+  /** The overlay takes canvas clicks only by closing; it has no in-scene input. */
+  ownsCanvasTarget(): boolean {
+    return false;
   }
 
   /** Lines the editor scrolled to, so the curved display can follow. */
@@ -145,7 +135,7 @@ export class EditorOverlay {
   }
 
   private show() {
-    this.pullSource();
+    this.session.pullSource();
     this.root.hidden = false;
     this.position();
     const line = this.store.getState().ui.codeScrollLine;
@@ -156,7 +146,7 @@ export class EditorOverlay {
   }
 
   private hide() {
-    this.flush();
+    this.session.flush();
     this.store.getState().dispatch({ type: 'setCodeScroll', line: this.topLine() });
     this.root.hidden = true;
     this.knobButton.hidden = true;
@@ -179,39 +169,6 @@ export class EditorOverlay {
     });
   }
 
-  private scheduleSource() {
-    clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.flush(), SOURCE_DEBOUNCE_MS);
-  }
-
-  /** Sends pending edits to the store now. */
-  flush(): void {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
-    }
-    const doc = this.view.state.doc.toString();
-    if (doc !== this.store.getState().project.source) {
-      this.pushing = true;
-      try {
-        this.store.getState().dispatch({ type: 'setSource', source: doc });
-      } finally {
-        this.pushing = false;
-      }
-    }
-  }
-
-  /** Brings in a source change made elsewhere (rename, bake, load). */
-  private pullSource() {
-    const src = this.store.getState().project.source;
-    const doc = this.view.state.doc.toString();
-    if (src === doc) return;
-    this.view.dispatch({
-      changes: { from: 0, to: doc.length, insert: src },
-      annotations: fromStore.of(true),
-    });
-  }
-
   private showDiagnostics() {
     const { compile } = this.store.getState();
     const doc = this.view.state.doc;
@@ -228,100 +185,30 @@ export class EditorOverlay {
       }
     }
     this.view.dispatch(setDiagnostics(this.view.state, diagnostics));
-    if (general.length) this.setHint(general.join(' · '), 'error', 0);
-    else if (this.hint.dataset.kind === 'error') this.setHint('', 'info', 0);
+    if (general.length) this.session.setHint(general.join(' · '), 'error', 0);
+    else if (this.session.hint.kind === 'error' && !this.session.hint.text.startsWith('Knob')) this.session.setHint('', 'info', 0);
   }
 
-  private setHint(text: string, kind: 'info' | 'error' | 'ok', ms = 4000) {
-    clearTimeout(this.hintTimer);
-    this.hint.textContent = text;
-    this.hint.dataset.kind = kind;
-    if (ms > 0 && text) this.hintTimer = setTimeout(() => this.setHint('', 'info', 0), ms);
+  private renderHint() {
+    this.hint.textContent = this.session.hint.text;
+    this.hint.dataset.kind = this.session.hint.kind;
   }
 
   private updateKnobButton() {
+    const offer = this.root.hidden ? null : this.session.knobOffer();
     const sel = this.view.state.selection.main;
-    if (sel.empty || this.root.hidden) {
-      this.knobButton.hidden = true;
-      return;
-    }
-    const src = this.view.state.doc.toString();
-    const r = checkLiteral(src, sel.from, sel.to);
-    // Only offer the button for selections that look like a number.
-    if (!r.ok && !/^\s*-?\s*[\d.]/.test(this.view.state.sliceDoc(sel.from, sel.to))) {
-      this.knobButton.hidden = true;
-      return;
-    }
-    const coords = this.view.coordsAtPos(sel.to);
-    if (!coords) {
+    const coords = offer && this.view.coordsAtPos(sel.to);
+    if (!offer || !coords) {
       this.knobButton.hidden = true;
       return;
     }
     const box = this.root.getBoundingClientRect();
     this.knobButton.hidden = false;
-    this.knobButton.disabled = !r.ok;
-    this.knobButton.textContent = r.ok ? `◉ make knob “${r.proposedName}”` : `✕ ${r.reason}`;
-    this.knobButton.title = r.ok ? `${isMac() ? '⌘' : 'Ctrl+'}K` : r.reason;
+    this.knobButton.disabled = !offer.ok;
+    this.knobButton.textContent = offer.ok ? `◉ make knob “${offer.name}”` : `✕ ${offer.reason}`;
+    this.knobButton.title = offer.ok ? `${isMac() ? '⌘' : 'Ctrl+'}K` : offer.reason;
     this.knobButton.style.left = `${Math.min(coords.right - box.left + 8, box.width - 40)}px`;
     this.knobButton.style.top = `${coords.top - box.top - 2}px`;
     this.knobButton.style.maxWidth = `${Math.max(160, box.width - (coords.right - box.left) - 24)}px`;
   }
-
-  /** Turns the selected literal into a knob in one undoable change. */
-  createKnob(): boolean {
-    const sel = this.view.state.selection.main;
-    const src = this.view.state.doc.toString();
-    const r = checkLiteral(src, sel.from, sel.to);
-    if (!r.ok) {
-      this.setHint(r.reason, 'error');
-      return false;
-    }
-    const used = this.store.getState().project.knobs.filter((k) => k.slot >= 0).length;
-    if (used >= KNOB_SLOTS) {
-      this.setHint(`All ${KNOB_SLOTS} knob slots are in use. Delete a knob first.`, 'error');
-      return false;
-    }
-    const a = analyze(src);
-    if (!a.ok) return false;
-    const rw = createKnobRewrite(src, r.info, a.tokens, r.from, r.to, r.proposedName, r.type);
-
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
-    }
-    this.pushing = true;
-    let res;
-    try {
-      res = this.store.getState().dispatch({
-        type: 'createKnob',
-        source: rw.source,
-        param: r.proposedName,
-        knobType: r.type,
-        value: r.value,
-      });
-    } finally {
-      this.pushing = false;
-    }
-    if (!res.ok) {
-      this.setHint(res.error, 'error');
-      return false;
-    }
-    // Changes are in original-document coordinates, applied as one transaction
-    // so a single undo removes the knob.
-    const nameAt = r.from + rw.changes.filter((c) => c.from < r.from).reduce((n, c) => n + c.insert.length - (c.to - c.from), 0);
-    this.view.dispatch({
-      changes: rw.changes,
-      selection: { anchor: nameAt, head: nameAt + r.proposedName.length },
-      annotations: fromStore.of(true),
-      userEvent: 'input.knob',
-    });
-    const knob = this.store.getState().project.knobs.find((k) => k.param === r.proposedName);
-    this.setHint(`Knob “${r.proposedName}” created in slot ${(knob?.slot ?? 0) + 1}. Rename it from the knob.`, 'ok');
-    this.knobButton.style.setProperty('--tint', KNOB_TINTS[(knob?.slot ?? 0) % KNOB_TINTS.length]!);
-    return true;
-  }
-}
-
-function isMac() {
-  return /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 }

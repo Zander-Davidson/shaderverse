@@ -6,39 +6,105 @@ import type { ProjectStore } from '../project/store';
 import type { Quality, ShaderRuntime } from '../shader/runtime';
 import { COLORS, MONO } from '../theme';
 import { CanvasPanel } from './panel';
+import { cutCircleFor, PanelShape } from './shape';
+import { drawScreenBackdrop, drawScreenGlare, gelButton, PHOSPHOR } from '../style/screen';
 
 const PX_PER_UNIT = 256;
+const HEAD = 56;
+const BEZEL = Math.round(0.2 * PX_PER_UNIT);
 
+/**
+ * Base for the right-hand panels. Their inner edge is carved by the portal's
+ * clearance circle, so each row starts just right of the curve.
+ */
 abstract class ReadoutPanel extends CanvasPanel {
-  constructor(rect: Rect, radius: number) {
-    super(rect, Math.round(rect.w * PX_PER_UNIT), Math.round(rect.h * PX_PER_UNIT), radius, 0.01);
+  constructor(
+    rect: Rect,
+    protected cfg: LayoutConfig,
+  ) {
+    super(rect, Math.round(rect.w * PX_PER_UNIT), Math.round(rect.h * PX_PER_UNIT), cfg.radius, 0.01);
+    this.reshape();
+  }
+
+  protected relayoutTo(cfg: LayoutConfig, rect: Rect) {
+    this.cfg = cfg;
+    this.pixelWidth = this.canvas.width = Math.round(rect.w * PX_PER_UNIT);
+    this.pixelHeight = this.canvas.height = Math.round(rect.h * PX_PER_UNIT);
+    this.rebuild(cfg.radius, rect);
+    this.reshape();
+    this.invalidate();
+  }
+
+  private reshape() {
+    const W = this.pixelWidth;
+    const H = this.pixelHeight;
+    const outer = new PanelShape(W, H, (this.cfg.cornerRadius / this.rect.w) * W, cutCircleFor(this.cfg, this.rect, W, H));
+    this.setChassis(outer, BEZEL, this.cfg.radius);
+  }
+
+  /** Left edge for content spanning screen rows y0..y1, clear of the curve. */
+  protected left(y0: number, y1: number): number {
+    return Math.max(16, this.shape!.leftLimit(y0 + this.oy, y1 + this.oy) - this.ox + 18);
+  }
+
+  /** Right edge for content spanning screen rows y0..y1. */
+  protected rightAt(y0: number, y1: number): number {
+    return this.shape!.rightLimit(y0 + this.oy, y1 + this.oy) - this.ox - 18;
+  }
+
+  protected get right(): number {
+    return this.rightAt(HEAD, this.ih - HEAD);
   }
 
   protected frame(ctx: CanvasRenderingContext2D, title: string, tag: string) {
-    const W = this.pixelWidth;
-    const H = this.pixelHeight;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = COLORS.panel;
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = COLORS.panelEdge;
-    ctx.lineWidth = 3;
-    ctx.strokeRect(1.5, 1.5, W - 3, H - 3);
-    ctx.fillStyle = '#0d151c';
-    ctx.fillRect(3, 3, W - 6, 52);
-    ctx.font = `600 20px ${MONO}`;
+    this.shape!.begin(ctx, COLORS.panel);
+    // Lay out in screen coordinates; end() restores.
+    ctx.translate(this.ox, this.oy);
+    drawScreenBackdrop(ctx, this.iw, this.ih);
+    const hg = ctx.createLinearGradient(0, 0, 0, HEAD);
+    hg.addColorStop(0, 'rgba(63, 242, 196, 0.16)');
+    hg.addColorStop(1, 'rgba(63, 242, 196, 0.04)');
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, 0, this.iw, HEAD);
+    ctx.fillStyle = 'rgba(63, 242, 196, 0.35)';
+    ctx.fillRect(0, HEAD, this.iw, 2);
+    ctx.font = `700 20px ${MONO}`;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = COLORS.accent;
-    ctx.fillText(title, 20, 30);
+    ctx.fillStyle = PHOSPHOR;
+    ctx.fillText(title, this.left(10, HEAD - 10) + 8, 30);
     ctx.textAlign = 'right';
     ctx.fillStyle = COLORS.dim;
-    ctx.fillText(tag, W - 20, 30);
+    ctx.fillText(tag, this.rightAt(10, HEAD - 10) - 8, 30);
     ctx.textAlign = 'left';
+  }
+
+  protected end(ctx: CanvasRenderingContext2D) {
+    drawScreenGlare(ctx, this.iw, this.ih);
+    this.shape!.finish(ctx, '#0a1413', '#3ff2c422');
   }
 
   protected label(ctx: CanvasRenderingContext2D, text: string, y: number) {
     ctx.font = `600 15px ${MONO}`;
     ctx.fillStyle = COLORS.dim;
-    ctx.fillText(text, 20, y);
+    ctx.fillText(text, this.left(y - 10, y + 10), y);
+  }
+
+  /** A label on the left and a value on the right of one row. */
+  protected row(ctx: CanvasRenderingContext2D, label: string, value: string, y: number) {
+    this.label(ctx, label, y);
+    ctx.font = `500 28px ${MONO}`;
+    ctx.fillStyle = COLORS.text;
+    ctx.textAlign = 'right';
+    ctx.fillText(value, this.right, y);
+    ctx.textAlign = 'left';
+  }
+
+  /** Buttons laid side by side across a row, from the curve to the right edge. */
+  protected buttonRow(ctx: CanvasRenderingContext2D, y: number, h: number, items: { id: string; text: string; active?: boolean }[], align: CanvasTextAlign = 'center') {
+    const x0 = this.left(y, y + h);
+    const gap = 12;
+    const w = (this.right - x0 - gap * (items.length - 1)) / items.length;
+    items.forEach((it, i) => this.button(ctx, it.id, it.text, x0 + i * (w + gap), y, w, h, it.active, align));
   }
 
   protected button(
@@ -53,15 +119,16 @@ abstract class ReadoutPanel extends CanvasPanel {
     align: CanvasTextAlign = 'center',
   ) {
     const hover = this.hoverButton === id;
-    ctx.fillStyle = active ? '#12303d' : hover ? '#15212b' : '#0e171e';
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = active ? COLORS.accent : hover ? '#3c5262' : COLORS.faint;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-    ctx.fillStyle = active ? COLORS.accent : hover ? COLORS.text : '#9fb0bd';
-    ctx.font = `600 18px ${MONO}`;
+    gelButton(ctx, x, y, w, h, { active, hover });
+    ctx.fillStyle = active ? '#eafff8' : hover ? '#e2eef0' : '#a9c2c6';
+    ctx.font = `700 ${h < 50 ? 16 : 18}px ${MONO}`;
     ctx.textAlign = align;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
     ctx.fillText(text, align === 'center' ? x + w / 2 : x + 16, y + h / 2 + 1);
+    ctx.restore();
     ctx.textAlign = 'left';
     this.addButton({ id, x, y, w, h });
   }
@@ -76,26 +143,25 @@ export class StatusPanel extends ReadoutPanel {
     private readonly store: ProjectStore,
     private readonly runtime: ShaderRuntime,
   ) {
-    super(cfg.status, cfg.radius);
+    super(cfg.status, cfg);
     store.subscribe((s, p) => {
       if (s.compile !== p.compile || s.project.playback !== p.project.playback) this.invalidate();
     });
   }
 
   relayout(cfg: LayoutConfig) {
-    this.rebuild(cfg.radius, cfg.status);
+    this.relayoutTo(cfg, cfg.status);
   }
 
-  /** Readouts change every frame; redraw at most ten times a second. */
+  /** Readouts change every frame; redraw four times a second. */
   tick(now: number) {
-    if (now - this.lastDraw > 100) {
+    if (now - this.lastDraw > 250) {
       this.lastDraw = now;
       this.invalidate();
     }
   }
 
   protected draw(ctx: CanvasRenderingContext2D): void {
-    const W = this.pixelWidth;
     const { compile, project } = this.store.getState();
     this.frame(ctx, 'STATUS', 'UNIT C/7a');
 
@@ -106,44 +172,51 @@ export class StatusPanel extends ReadoutPanel {
         : compile.status === 'error'
           ? { t: `FAULT ×${compile.errors.length}`, c: COLORS.error }
           : { t: 'PENDING', c: COLORS.warn };
+    // Status LED
+    ctx.save();
+    ctx.shadowColor = st.c;
+    ctx.shadowBlur = 16;
     ctx.fillStyle = st.c;
     ctx.beginPath();
-    ctx.arc(W - 34, 88, 8, 0, Math.PI * 2);
+    ctx.arc(this.right - 8, 88, 8, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = st.c;
     ctx.font = `600 30px ${MONO}`;
-    ctx.fillText(st.t, 20, 124);
+    ctx.fillText(st.t, this.left(110, 140), 124);
 
-    const row = (label: string, value: string, y: number) => {
-      this.label(ctx, label, y);
-      ctx.font = `500 28px ${MONO}`;
-      ctx.fillStyle = COLORS.text;
-      ctx.textAlign = 'right';
-      ctx.fillText(value, W - 20, y);
-      ctx.textAlign = 'left';
-    };
-    row('FPS', this.fps.toFixed(0), 178);
-    row('TIME', `${this.runtime.time.toFixed(2)}s`, 222);
-    row('FRAME', String(this.runtime.frame), 266);
-    row('RES', `${this.runtime.size}²`, 310);
+    this.row(ctx, 'FPS', this.fps.toFixed(0), 178);
+    this.row(ctx, 'TIME', `${this.runtime.time.toFixed(2)}s`, 222);
+    this.row(ctx, 'FRAME', String(this.runtime.frame), 266);
+    this.row(ctx, 'RES', `${this.runtime.size}²`, 310);
 
-    ctx.fillStyle = COLORS.faint;
-    ctx.fillRect(20, 340, W - 40, 2);
+    ctx.fillStyle = 'rgba(63, 242, 196, 0.25)';
+    const lx = this.left(339, 342);
+    ctx.fillRect(lx, 340, this.right - lx, 2);
     this.label(ctx, 'PLAYBACK', 370);
-    const bw = (W - 40 - 12) / 2;
-    this.button(ctx, 'play', project.playback.playing ? '❚❚ PAUSE' : '▶ PLAY', 20, 390, bw, 64, !project.playback.playing);
-    this.button(ctx, 'restart', '⟲ RESTART', 32 + bw, 390, bw, 64);
+    this.buttonRow(ctx, 390, 64, [
+      { id: 'play', text: project.playback.playing ? '❚❚ PAUSE' : '▶ PLAY', active: !project.playback.playing },
+      { id: 'restart', text: '⟲ RESTART' },
+    ]);
 
     this.label(ctx, 'QUALITY', 492);
-    const qw = (W - 40 - 24) / 3;
-    (['low', 'medium', 'high'] as Quality[]).forEach((q, i) => {
-      this.button(ctx, `q:${q}`, q === 'medium' ? 'MED' : q.toUpperCase(), 20 + i * (qw + 12), 512, qw, 64, project.playback.quality === q);
-    });
+    this.buttonRow(
+      ctx,
+      512,
+      64,
+      (['low', 'medium', 'high'] as Quality[]).map((q) => ({
+        id: `q:${q}`,
+        text: q === 'medium' ? 'MED' : q.toUpperCase(),
+        active: project.playback.quality === q,
+      })),
+    );
 
     ctx.font = `15px ${MONO}`;
     ctx.fillStyle = COLORS.dim;
-    const warn = compile.status === 'error' ? 'LAST GOOD PROGRAM RUNNING' : '';
-    ctx.fillText(warn, 20, 620);
-    ctx.fillText('SPACE pause  ·  R restart  ·  Q quality', 20, this.pixelHeight - 36);
+    if (compile.status === 'error') ctx.fillText('LAST GOOD PROGRAM RUNNING', this.left(610, 630), 620);
+    const fy = this.ih - 34;
+    ctx.fillText('SPACE pause · R restart · Q quality', this.left(fy - 10, fy + 10), fy);
+    this.end(ctx);
   }
 
   protected onButton(id: string): void {
@@ -169,32 +242,39 @@ export class LibraryPanel extends ReadoutPanel {
     private readonly store: ProjectStore,
     private readonly actions: LibraryActions,
   ) {
-    super(cfg.library, cfg.radius);
+    super(cfg.library, cfg);
     store.subscribe((s, p) => {
       if (s.project.name !== p.project.name) this.invalidate();
     });
   }
 
   relayout(cfg: LayoutConfig) {
-    this.rebuild(cfg.radius, cfg.library);
+    this.relayoutTo(cfg, cfg.library);
   }
 
   protected draw(ctx: CanvasRenderingContext2D): void {
-    const W = this.pixelWidth;
     const current = this.store.getState().project.name;
     this.frame(ctx, 'LIBRARY', 'v1.0');
-    this.label(ctx, 'NEW FROM EXAMPLE', 84);
+    this.label(ctx, 'NEW FROM EXAMPLE', 80);
+    const step = 47;
     this.actions.examples.forEach((name, i) => {
-      this.button(ctx, `ex:${i}`, `${String(i + 1).padStart(2, '0')}  ${name.toUpperCase()}`, 20, 104 + i * 64, W - 40, 54, name === current, 'left');
+      const y = 96 + i * step;
+      this.buttonRow(ctx, y, step - 8, [{ id: `ex:${i}`, text: `${String(i + 1).padStart(2, '0')}  ${name.toUpperCase()}`, active: name === current }], 'left');
     });
-    const y0 = 104 + this.actions.examples.length * 64 + 20;
-    ctx.fillStyle = COLORS.faint;
-    ctx.fillRect(20, y0, W - 40, 2);
-    this.label(ctx, 'FILE', y0 + 30);
-    this.button(ctx, 'export', '↓ EXPORT PROJECT', 20, y0 + 50, W - 40, 54, false, 'left');
-    this.button(ctx, 'import', '↑ IMPORT PROJECT', 20, y0 + 114, W - 40, 54, false, 'left');
-    this.button(ctx, 'glsl', '↓ EXPORT .GLSL (BAKED)', 20, y0 + 178, W - 40, 54, false, 'left');
-    this.button(ctx, 'help', '?  SHORTCUTS', 20, this.pixelHeight - 80, W - 40, 54, false, 'left');
+    const y0 = 96 + this.actions.examples.length * step + 12;
+    ctx.fillStyle = 'rgba(63, 242, 196, 0.25)';
+    const lx = this.left(y0 - 1, y0 + 2);
+    ctx.fillRect(lx, y0, this.right - lx, 2);
+    this.label(ctx, 'FILE', y0 + 24);
+    this.buttonRow(ctx, y0 + 40, 40, [
+      { id: 'export', text: '↓ PROJECT' },
+      { id: 'import', text: '↑ PROJECT' },
+    ]);
+    this.buttonRow(ctx, y0 + 88, 40, [
+      { id: 'glsl', text: '↓ .GLSL' },
+      { id: 'help', text: '? KEYS' },
+    ]);
+    this.end(ctx);
   }
 
   protected onButton(id: string): void {

@@ -24,6 +24,8 @@ export class ShaderRuntime {
   private knobValues = new Map<string, number>();
   private mouse = new THREE.Vector4(0, 0, 0, 0);
   private lastDelta = 0;
+  /** Set when an input changes, so a paused shader re-renders once. */
+  private dirty = true;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -50,6 +52,7 @@ export class ShaderRuntime {
   setQuality(quality: Quality): void {
     const s = QUALITY_SIZES[quality];
     if (s !== this.target.width) this.target.setSize(s, s);
+    this.dirty = true;
   }
 
   /** Compiles `source`; on success swaps it in, otherwise keeps the last good program. */
@@ -84,17 +87,20 @@ export class ShaderRuntime {
     this.quad.material = material;
     this.params = result.params;
     this.compileCount++;
+    this.dirty = true;
     return result;
   }
 
   setKnob(param: string, value: number): void {
     this.knobValues.set(param, value);
+    this.dirty = true;
     const u = this.material?.uniforms[knobUniformName(param)];
     if (u) u.value = value;
   }
 
   /** Shadertoy mouse: xy while held, zw the click point, negated when released. */
   pointer(x: number, y: number, down: boolean, pressed: boolean): void {
+    this.dirty = true;
     if (pressed) this.mouse.set(x, y, x, y);
     else if (down) this.mouse.set(x, y, Math.abs(this.mouse.z), -Math.abs(this.mouse.w));
     else this.mouse.set(this.mouse.x, this.mouse.y, -Math.abs(this.mouse.z), -Math.abs(this.mouse.w));
@@ -103,10 +109,14 @@ export class ShaderRuntime {
   restart(): void {
     this.time = 0;
     this.frame = 0;
+    this.dirty = true;
   }
 
   render(dt: number): void {
     if (!this.material) return;
+    // A paused shader with unchanged inputs would draw the same image.
+    if (!this.playing && !this.dirty) return;
+    this.dirty = false;
     const step = this.playing ? Math.min(dt, 0.1) : 0;
     this.time += step;
     this.lastDelta = step;

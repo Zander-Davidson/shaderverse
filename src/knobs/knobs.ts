@@ -3,16 +3,19 @@
 // to uniforms only: turning a knob never recompiles.
 
 import * as THREE from 'three';
+import { physicalMaterial } from '../style/quality';
 import { knobSlotPosition, type LayoutConfig, type Rect } from '../cockpit/layout';
-import { CanvasPanel, type PanelPointerEvent, type PointerTarget } from '../panels/panel';
+import { CanvasPanel, redrawListenerRef, type PanelPointerEvent, type PointerTarget } from '../panels/panel';
+
+const redrawListener = { call: (o: THREE.Object3D) => redrawListenerRef()?.(o) };
 import { wallToWorld } from '../panels/patch';
 import { KNOB_SLOTS, type KnobRecord } from '../project/schema';
 import type { ProjectStore } from '../project/store';
 import { COLORS, KNOB_TINTS, MONO } from '../theme';
+import { KnobTubes } from './tubes';
 
 /** Screen pixels of vertical drag for the full range; fine control divides by 10. */
 export const DRAG_PX_FULL_RANGE = 240;
-const FACE_ASPECT = 1.2;
 const ARC_START = Math.PI * 0.75;
 const ARC_SWEEP = Math.PI * 1.5;
 
@@ -32,9 +35,56 @@ export function formatValue(k: Pick<KnobRecord, 'type'>, v: number): string {
 function faceRect(cfg: LayoutConfig, slot: number): Rect {
   const p = knobSlotPosition(cfg, slot, KNOB_SLOTS);
   const w = cfg.knobRing.size;
-  const h = w * FACE_ASPECT;
-  // The ring's center sits at the slot position; the label hangs below it.
-  return { x: p.x, y: p.y - (h - w) / 2, w, h };
+  return { x: p.x, y: p.y, w, h: w };
+}
+
+/**
+ * Draws `text` along a circle of radius `r` around (cx, cy), centered on the
+ * top or bottom of the circle and always reading left to right, upright.
+ */
+export function arcText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,
+  cy: number,
+  r: number,
+  side: 'top' | 'bottom',
+  maxSweep: number,
+  font: (px: number) => string,
+  sizes: number[],
+): void {
+  // Pick the largest size that fits the sweep, then truncate if still too long.
+  let shown = text;
+  let px = sizes[sizes.length - 1]!;
+  for (const s of sizes) {
+    ctx.font = font(s);
+    if (ctx.measureText(text).width / r <= maxSweep) {
+      px = s;
+      break;
+    }
+  }
+  ctx.font = font(px);
+  while (shown.length > 1 && ctx.measureText(shown).width / r > maxSweep) shown = `${shown.slice(0, -2)}…`;
+
+  const widths = [...shown].map((ch) => ctx.measureText(ch).width);
+  const sweep = widths.reduce((a, b) => a + b, 0) / r;
+  const dir = side === 'top' ? 1 : -1;
+  // Top text runs clockwise from the left; bottom text runs counterclockwise.
+  let a = (side === 'top' ? -Math.PI / 2 : Math.PI / 2) - (dir * sweep) / 2;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  [...shown].forEach((ch, i) => {
+    const half = widths[i]! / 2 / r;
+    a += dir * half;
+    ctx.save();
+    ctx.translate(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    ctx.rotate(side === 'top' ? a + Math.PI / 2 : a - Math.PI / 2);
+    ctx.fillText(ch, 0, 0);
+    ctx.restore();
+    a += dir * half;
+  });
+  ctx.restore();
 }
 
 class KnobFace extends CanvasPanel {
@@ -43,27 +93,45 @@ class KnobFace extends CanvasPanel {
   active = false;
 
   constructor(cfg: LayoutConfig, readonly slot: number) {
-    super(faceRect(cfg, slot), 384, Math.round(384 * FACE_ASPECT), cfg.radius, 0.015);
+    // In front of the portal rim, so labels are never covered.
+    super(faceRect(cfg, slot), 384, 384, cfg.radius, 0.025);
   }
 
   protected draw(ctx: CanvasRenderingContext2D): void {
     const W = this.pixelWidth;
     const H = this.pixelHeight;
     const cx = W / 2;
-    const cy = W / 2;
-    const R = W * 0.4;
+    const cy = H / 2;
+    // Ring just outside the cap; labels wrap around outside the ticks.
+    const R = W * 0.3;
+    const TEXT_R = W * 0.415;
     const tint = KNOB_TINTS[this.slot % KNOB_TINTS.length]!;
     const k = this.knob;
     ctx.clearRect(0, 0, W, H);
 
-    // Mounting plate
+    // Mounting well: a dark recessed dish with a lit metal lip.
+    const lip = ctx.createLinearGradient(0, 0, W, H);
+    lip.addColorStop(0, '#9fb6bb');
+    lip.addColorStop(0.35, '#2f4146');
+    lip.addColorStop(0.7, '#0e1517');
+    lip.addColorStop(1, '#4a6066');
     ctx.beginPath();
-    ctx.arc(cx, cy, R + 26, 0, Math.PI * 2);
-    ctx.fillStyle = k ? (this.hover || this.active ? '#111b23' : '#0b1218') : '#080d11';
+    ctx.arc(cx, cy, W / 2 - 3, 0, Math.PI * 2);
+    ctx.fillStyle = lip;
     ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = k && (this.hover || this.active) ? `${tint}aa` : '#17222b';
-    ctx.stroke();
+    const dish = ctx.createRadialGradient(cx, cy - W * 0.08, W * 0.05, cx, cy, W / 2 - 14);
+    dish.addColorStop(0, k ? '#0f1c1c' : '#0a1111');
+    dish.addColorStop(0.85, '#050a0a');
+    dish.addColorStop(1, '#020404');
+    ctx.beginPath();
+    ctx.arc(cx, cy, W / 2 - 14, 0, Math.PI * 2);
+    ctx.fillStyle = dish;
+    ctx.fill();
+    if (k && (this.hover || this.active)) {
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = `${tint}aa`;
+      ctx.stroke();
+    }
 
     // Track
     ctx.lineCap = 'round';
@@ -85,9 +153,7 @@ class KnobFace extends CanvasPanel {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (!k) {
-      ctx.font = `600 22px ${MONO}`;
-      ctx.fillStyle = '#26333d';
-      ctx.fillText(`SLOT ${this.slot + 1}`, cx, W + 12);
+      // An empty slot: bare chrome over the well, no readouts.
       return;
     }
 
@@ -105,13 +171,11 @@ class KnobFace extends CanvasPanel {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    const label = k.label.length > 14 ? `${k.label.slice(0, 13)}…` : k.label;
-    ctx.font = `600 30px ${MONO}`;
     ctx.fillStyle = tint;
-    ctx.fillText(label, cx, W + 2);
-    ctx.font = `500 30px ${MONO}`;
+    arcText(ctx, k.label.toUpperCase(), cx, cy, TEXT_R, 'top', Math.PI * 0.85, (px) => `700 ${px}px ${MONO}`, [30, 26, 22, 19]);
     ctx.fillStyle = this.active ? '#ffffff' : COLORS.text;
-    ctx.fillText(formatValue(k, k.value), cx, W + 40);
+    // The value sits in the gap at the bottom of the ring.
+    arcText(ctx, formatValue(k, k.value), cx, cy, TEXT_R, 'bottom', Math.PI * 0.45, (px) => `600 ${px}px ${MONO}`, [30, 26, 22]);
   }
 }
 
@@ -122,21 +186,44 @@ class KnobCap {
   private readonly body: THREE.Mesh;
 
   constructor(tint: string) {
-    const bodyMat = new THREE.MeshStandardMaterial({ color: '#1a232b', metalness: 0.7, roughness: 0.32 });
-    const body = new THREE.CylinderGeometry(0.235, 0.265, 0.16, 64, 1);
-    body.rotateX(Math.PI / 2);
-    this.body = new THREE.Mesh(body, bodyMat);
+    // Polished chrome with a faint thin-film sheen.
+    const chrome = physicalMaterial({
+      color: '#c9d6da',
+      metalness: 1,
+      roughness: 0.16,
+      clearcoat: 1,
+      clearcoatRoughness: 0.08,
+      iridescence: 0.45,
+      iridescenceIOR: 1.4,
+      iridescenceThicknessRange: [200, 600],
+    });
+    const dark = physicalMaterial({ color: '#1b2427', metalness: 0.9, roughness: 0.38, clearcoat: 0.5 });
+    // A lathed profile: wide skirt, waist, domed cap.
+    const profile = [
+      [0.0, 0.0], [0.28, 0.0], [0.285, 0.035], [0.27, 0.06], [0.235, 0.075], [0.225, 0.12],
+      [0.215, 0.15], [0.19, 0.168], [0.12, 0.178], [0.0, 0.182],
+    ].map(([r, h]) => new THREE.Vector2(r, h));
+    const lathe = new THREE.LatheGeometry(profile, 72);
+    // Lathe axis is +y; turn it to face the camera along +z.
+    lathe.rotateX(Math.PI / 2);
+    this.body = new THREE.Mesh(lathe, chrome);
     this.group.add(this.body);
-    // Knurled skirt
-    const skirt = new THREE.Mesh(
-      new THREE.TorusGeometry(0.255, 0.012, 8, 64),
-      new THREE.MeshStandardMaterial({ color: '#2a3743', metalness: 0.8, roughness: 0.4 }),
-    );
-    skirt.position.z = 0.02;
-    this.group.add(skirt);
+    // Knurled grip: a ring of fine ridges around the skirt.
+    const ridges = new THREE.InstancedMesh(new THREE.BoxGeometry(0.012, 0.02, 0.05), dark, 48);
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      m.makeRotationZ(a).setPosition(Math.cos(a) * 0.278, Math.sin(a) * 0.278, 0.03);
+      ridges.setMatrixAt(i, m);
+    }
+    this.group.add(ridges);
+    // Recessed dark face on the cap.
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.15, 48), dark);
+    face.position.z = 0.183;
+    this.group.add(face);
     this.indicatorMat = new THREE.MeshBasicMaterial({ color: tint, toneMapped: false });
-    const ind = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.012), this.indicatorMat);
-    ind.position.set(0, 0.155, 0.082);
+    const ind = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.11, 0.012), this.indicatorMat);
+    ind.position.set(0, 0.09, 0.19);
     this.pivot.add(ind);
     this.group.add(this.pivot);
   }
@@ -145,10 +232,13 @@ class KnobCap {
     const p = knobSlotPosition(cfg, slot, KNOB_SLOTS);
     wallToWorld(p.x, p.y, cfg.radius, 0.09, this.group.position);
     this.group.lookAt(0, 0, 0);
+    // Cap geometry is modeled for a 0.98-wide face.
+    this.group.scale.setScalar(cfg.knobRing.size / 0.98);
   }
 
-  setVisible(v: boolean) {
-    this.group.visible = v;
+  /** Empty slots keep the chrome cap but lose the angle notch. */
+  setAssigned(v: boolean) {
+    this.pivot.visible = v;
   }
 }
 
@@ -167,7 +257,7 @@ export class KnobSlot implements PointerTarget {
     this.face = new KnobFace(cfg, slot);
     this.cap = new KnobCap(KNOB_TINTS[slot % KNOB_TINTS.length]!);
     this.cap.place(cfg, slot);
-    this.cap.setVisible(false);
+    this.cap.setAssigned(false);
   }
 
   get meshes() {
@@ -199,10 +289,15 @@ export class KnobSlot implements PointerTarget {
   setKnob(k: KnobRecord | null) {
     const prev = this.face.knob;
     this.face.knob = k;
-    this.cap.setVisible(!!k);
+    if (this.cap.pivot.visible !== !!k) redrawListener.call(this.cap.group);
+    this.cap.setAssigned(!!k);
     if (k) {
       const f = k.max > k.min ? (k.value - k.min) / (k.max - k.min) : 0;
-      this.cap.pivot.rotation.z = (0.75 - 1.5 * Math.min(1, Math.max(0, f))) * Math.PI;
+      const rz = (0.75 - 1.5 * Math.min(1, Math.max(0, f))) * Math.PI;
+      if (rz !== this.cap.pivot.rotation.z) {
+        this.cap.pivot.rotation.z = rz;
+        redrawListener.call(this.cap.group);
+      }
     }
     if (prev !== k) this.face.invalidate();
   }
@@ -210,6 +305,7 @@ export class KnobSlot implements PointerTarget {
   private setActive(active: boolean) {
     this.face.active = active;
     this.cap.indicatorMat.color.set(active ? '#ffffff' : KNOB_TINTS[this.slot % KNOB_TINTS.length]!);
+    redrawListener.call(this.cap.group);
     this.face.invalidate();
   }
 
@@ -275,8 +371,10 @@ export class KnobSlot implements PointerTarget {
 export class KnobBank {
   readonly slots: KnobSlot[] = [];
   readonly group = new THREE.Group();
+  readonly tubes: KnobTubes;
 
   constructor(cfg: LayoutConfig, store: ProjectStore) {
+    this.tubes = new KnobTubes(cfg);
     for (let i = 0; i < KNOB_SLOTS; i++) {
       const s = new KnobSlot(cfg, i, store);
       this.slots.push(s);
@@ -284,8 +382,18 @@ export class KnobBank {
     }
     const sync = () => {
       const knobs = store.getState().project.knobs;
-      for (const s of this.slots) s.setKnob(knobs.find((k) => k.slot === s.slot) ?? null);
+      for (const s of this.slots) {
+        const k = knobs.find((x) => x.slot === s.slot) ?? null;
+        const was = !!s.knob;
+        s.setKnob(k);
+        if (was !== !!k) {
+          this.tubes.setActive(s.slot, !!k, KNOB_TINTS[s.slot % KNOB_TINTS.length]);
+          const g = this.tubes.tubeGroup(s.slot);
+          if (g) redrawListener.call(g);
+        }
+      }
     };
+    for (let i = 0; i < KNOB_SLOTS; i++) this.tubes.setActive(i, false, KNOB_TINTS[i % KNOB_TINTS.length]);
     sync();
     store.subscribe((st, prev) => {
       if (st.project.knobs !== prev.project.knobs) sync();
@@ -294,10 +402,13 @@ export class KnobBank {
 
   relayout(cfg: LayoutConfig) {
     for (const s of this.slots) s.relayout(cfg);
+    this.tubes.relayout(cfg);
+    for (const s of this.slots) this.tubes.setActive(s.slot, !!s.knob, KNOB_TINTS[s.slot % KNOB_TINTS.length]);
   }
 
-  update() {
+  update(time = 0) {
     for (const s of this.slots) s.face.update();
+    this.tubes.update(time);
   }
 
   setAnisotropy(n: number) {
