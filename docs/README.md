@@ -6,7 +6,7 @@
 **System classification:** Interactive generative graphics instrument\
 **Unit designation:** C/7a *(fictional hardware designation; inspired by
 the specificity of William Gibson's imagined technology)*\
-**Status:** v1.0 architecture defined; implementation not started\
+**Status:** v1.0 implemented (see the repository README)\
 **Primary platform:** Desktop browser (v1.0 runs locally, with no
 backend)
 

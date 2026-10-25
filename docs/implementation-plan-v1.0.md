@@ -5,7 +5,7 @@
 [Roadmap](roadmap.md) and the [Decision log](decisions.md)\
 **Scope:** v1.0 only: a local browser app, with no backend, accounts or
 AI\
-**Status:** Plan agreed in principle; no code written yet
+**Status:** Implemented; acceptance checks in progress (Firefox and Safari not yet verified)
 
 ------------------------------------------------------------------------
 
