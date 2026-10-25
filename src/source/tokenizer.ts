@@ -2,6 +2,8 @@
 // included), so highlighting can draw every character and analysis can map
 // tokens back to exact offsets.
 
+import { LIBRARY_NAMES } from '../shader/stdlib';
+
 export type TokenType =
   | 'whitespace'
   | 'comment'
@@ -58,6 +60,8 @@ export const BUILTINS = new Set([
   'textureProjGradOffset', 'dFdx', 'dFdy', 'fwidth',
   'gl_FragCoord', 'gl_FrontFacing', 'gl_PointCoord', 'gl_FragDepth',
   'iTime', 'iTimeDelta', 'iFrame', 'iResolution', 'iMouse', 'iDate',
+  // The shader standard library (src/shader/stdlib.ts).
+  ...LIBRARY_NAMES,
 ]);
 
 /** Words GLSL ES 3.00 reserves for future use; they can't be identifiers. */

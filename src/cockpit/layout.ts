@@ -24,6 +24,8 @@ export interface LayoutConfig {
   cornerRadius: number;
   /** Knobs sit on an arc around the portal's left side, top to bottom. */
   knobRing: { radius: number; size: number; startDeg: number; stepDeg: number };
+  /** Function plot, above the code. */
+  plot: Rect;
   code: Rect;
   status: Rect;
   library: Rect;
@@ -40,7 +42,8 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   // Nearly touching: neighbors are ~0.93 apart for 0.9-wide knobs.
   knobRing: { radius: 2.9, size: 0.9, startDeg: 115, stepDeg: 18.5 },
   // Room between the source and the knobs for the knob tubing.
-  code: { x: -4.85, y: 0, w: 4.9, h: 8.1 },
+  plot: { x: -4.85, y: 2.75, w: 4.9, h: 2.6 },
+  code: { x: -4.85, y: -1.35, w: 4.9, h: 5.4 },
   status: { x: 5.6, y: 2.06, w: 3.3, h: 3.88 },
   library: { x: 5.6, y: -2.06, w: 3.3, h: 3.88 },
 };

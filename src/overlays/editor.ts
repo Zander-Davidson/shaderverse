@@ -1,17 +1,35 @@
 // Flat CodeMirror editor that lifts forward over the code display. It never
 // covers the portal. Kept as an alternative to the in-scene editor
-// (?editor=overlay); the editing logic lives in EditorSession.
+// (?editor=overlay); the editing logic lives in EditorSession. Hovering a
+// standard library function name reports it for the function plot.
 
 import { cpp } from '@codemirror/lang-cpp';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { setDiagnostics, type Diagnostic } from '@codemirror/lint';
-import { EditorView } from '@codemirror/view';
+import { StateEffect, StateField } from '@codemirror/state';
+import { Decoration, EditorView, type DecorationSet } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
 import { EditorSession, isMac } from '../editor/session';
 import type { ScreenRect } from '../panels/bounds';
 import type { ProjectStore } from '../project/store';
+import { functionAt, type FunctionHit } from '../source/functions';
 import { COLORS, MONO } from '../theme';
+
+/** Underlines the hovered library function name. */
+const setFunctionMark = StateEffect.define<{ from: number; to: number } | null>();
+const functionMark = Decoration.mark({ class: 'sv-fn-hover' });
+const functionMarkField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(marks, tr) {
+    marks = marks.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(setFunctionMark)) marks = e.value ? Decoration.set([functionMark.range(e.value.from, e.value.to)]) : Decoration.none;
+    }
+    return marks;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 export const highlight = HighlightStyle.define([
   { tag: [t.keyword, t.controlKeyword, t.modifier, t.operatorKeyword], color: COLORS.keyword },
@@ -43,6 +61,7 @@ const theme = EditorView.theme(
     '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: `underline wavy ${COLORS.error}` },
     '.cm-panels': { backgroundColor: '#0b1116', color: COLORS.text },
     '.cm-searchMatch': { backgroundColor: '#4fd1ff33' },
+    '.sv-fn-hover': { textDecoration: `underline 2px ${COLORS.accent}`, textUnderlineOffset: '3px' },
   },
   { dark: true },
 );
@@ -52,6 +71,9 @@ export class EditorOverlay {
   readonly session: EditorSession;
   private readonly hint: HTMLDivElement;
   private readonly knobButton: HTMLButtonElement;
+  private fnHover: FunctionHit | null = null;
+  /** Called when the hovered function name changes. */
+  onFunctionHover: ((hit: FunctionHit | null) => void) | null = null;
 
   constructor(
     private readonly store: ProjectStore,
@@ -83,6 +105,7 @@ export class EditorOverlay {
       cpp(),
       theme,
       syntaxHighlighting(highlight),
+      functionMarkField,
     ]);
     this.session.subscribe((u) => {
       if (!u) this.renderHint();
@@ -105,6 +128,25 @@ export class EditorOverlay {
       }
     });
     window.addEventListener('resize', () => this.position());
+    this.view.contentDOM.addEventListener('mousemove', (e) => this.hoverAt(e.clientX, e.clientY));
+    this.view.contentDOM.addEventListener('mouseleave', () => this.setFunctionHover(null));
+  }
+
+  private hoverAt(x: number, y: number) {
+    let pos = this.view.posAtCoords({ x, y });
+    if (pos === null) return this.setFunctionHover(null);
+    // posAtCoords gives the nearest character boundary; step back onto the
+    // character the pointer is over when it's left of that boundary.
+    const c = this.view.coordsAtPos(pos);
+    if (c && x < c.left && pos > 0) pos--;
+    this.setFunctionHover(functionAt(this.session.doc, pos));
+  }
+
+  private setFunctionHover(hit: FunctionHit | null) {
+    if (hit?.from === this.fnHover?.from && hit?.fn === this.fnHover?.fn) return;
+    this.fnHover = hit;
+    this.view.dispatch({ effects: setFunctionMark.of(hit && { from: hit.from, to: hit.to }) });
+    this.onFunctionHover?.(hit);
   }
 
   get view(): EditorView {
@@ -150,6 +192,7 @@ export class EditorOverlay {
     this.store.getState().dispatch({ type: 'setCodeScroll', line: this.topLine() });
     this.root.hidden = true;
     this.knobButton.hidden = true;
+    this.setFunctionHover(null);
     this.view.contentDOM.blur();
   }
 

@@ -1,3 +1,8 @@
+// Example shaders are written with the shader standard library
+// (src/shader/stdlib.ts) wherever one of its functions fits: reciprocal(x)
+// rather than 1.0 / x, wave(x) rather than 0.5 + 0.5 * cos(x), and so on.
+// New examples should do the same, so every shape can be hovered and plotted.
+
 import { makeKnob, newProject, type KnobRecord, type Project } from '../src/project/schema';
 import type { KnobType } from '../src/source/mainImage';
 import rings from './rings.glsl?raw';

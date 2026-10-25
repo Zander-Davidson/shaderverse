@@ -23,6 +23,7 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
     if (r.size !== undefined) f.add(r, 'size', 1, 8, 0.05).onChange(onChange);
   };
   rect('portal', cfg.portal);
+  rect('plot', cfg.plot);
   rect('code', cfg.code);
   rect('status', cfg.status);
   rect('library', cfg.library);

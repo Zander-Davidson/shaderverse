@@ -12,7 +12,7 @@ float field(vec2 p, int blobs, float flow)
                       cos(iTime * flow * (0.5 + 0.11 * fi) + fi * 2.3)) * vec2(0.9, 0.55);
         // Stretched horizontally, like pill-shaped buttons.
         vec2 d = (p - c) * vec2(0.7, 1.0);
-        f += 0.09 / dot(d, d);
+        f += 0.09 * reciprocal(dot(d, d));
     }
     return f;
 }
@@ -39,7 +39,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord,
     vec3 l = normalize(vec3(-0.5, 0.7, 0.6));
     float diff = max(dot(n, l), 0.0);
     float spec = pow(max(dot(reflect(-l, n), vec3(0.0, 0.0, 1.0)), 0.0), 40.0) * gloss;
-    float rim = pow(1.0 - n.z, 2.0);
+    float rim = square(1.0 - n.z);
 
     // hue slides the gel from acid green toward cyan.
     vec3 gel = mix(vec3(0.1, 1.0, 0.3), vec3(0.0, 0.75, 1.0), hue);

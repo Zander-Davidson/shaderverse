@@ -41,7 +41,7 @@ vec3 studio(vec3 r, float sheen, float fres)
     c += vec3(0.6, 1.0, 0.9) * smoothstep(0.12, 0.0, abs(r.x + 0.55)) * 0.9;
     c += vec3(1.0, 0.85, 0.7) * smoothstep(0.1, 0.0, abs(r.x - 0.6)) * 0.5;
     // Thin-film iridescence toward grazing angles.
-    vec3 film = 0.5 + 0.5 * cos(6.2831 * (fres * 1.6 + vec3(0.0, 0.33, 0.67)));
+    vec3 film = wave(6.2831 * (fres * 1.6 + vec3(0.0, 0.33, 0.67)));
     return c * mix(vec3(1.0), film, sheen * fres);
 }
 

@@ -1,6 +1,8 @@
 // Builds the complete GLSL ES 3.00 fragment shader around the user's source.
 // The user never sees this; `#line 1` keeps error line numbers on their code.
 
+import { preludeFor } from './stdlib';
+
 export const KNOB_UNIFORM_PREFIX = 'svKnob_';
 
 /** Line number given to the generated main(), so its errors are recognizable. */
@@ -41,6 +43,7 @@ export function wrapShader(userSource: string, params: WrapperParam[]): string {
     STANDARD_UNIFORMS +
     knobUniforms +
     'out vec4 svFragColor;\n' +
+    preludeFor(userSource) +
     '#line 1\n' +
     userSource +
     `\n#line ${WRAPPER_MAIN_LINE}\n` +

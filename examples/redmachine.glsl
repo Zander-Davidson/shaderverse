@@ -9,16 +9,17 @@ float hash(vec2 p)
 // Distance to the wall: grooved panels plus a sphere per cell.
 vec2 machine(vec3 p, float density, float ballSize, float t)
 {
+    float cellSize = reciprocal(density);
     vec2 cell = floor(p.xy * density);
-    vec2 local = (fract(p.xy * density) - 0.5) / density;
+    vec2 local = (fract(p.xy * density) - 0.5) * cellSize;
     float r = hash(cell);
-    float size = ballSize * (0.45 + 0.55 * r) / density;
+    float size = ballSize * (0.45 + 0.55 * r) * cellSize;
     // Balls bob gently in their sockets.
-    float z = -size * 0.4 + 0.02 * sin(t * 2.0 + r * 30.0) / density;
+    float z = -size * 0.4 + 0.02 * sin(t * 2.0 + r * 30.0) * cellSize;
     float ball = length(vec3(local, p.z - z)) - size;
     // Panel with grooves along cell borders.
     vec2 b = abs(local) * density;
-    float groove = smoothstep(0.46, 0.5, max(b.x, b.y)) * 0.04 / density;
+    float groove = smoothstep(0.46, 0.5, max(b.x, b.y)) * 0.04 * cellSize;
     float panel = p.z + groove;
     return ball < panel ? vec2(ball, 1.0) : vec2(panel, 0.0);
 }

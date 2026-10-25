@@ -2,7 +2,8 @@
 // error markers and knob tints. With an EditorSession attached it is also the
 // editor: it draws CodeMirror's selection and caret, and maps pointer input on
 // the curved mesh back to document positions. Without one, clicking it opens
-// the flat overlay editor.
+// the flat overlay editor. Hovering a standard library function name reports
+// it for the function plot.
 
 import { EditorSelection } from '@codemirror/state';
 import * as THREE from 'three';
@@ -13,6 +14,7 @@ import type { LayoutConfig } from '../cockpit/layout';
 import { columnOf, offsetAt, TAB_SIZE } from '../editor/grid';
 import { isMac, type EditorSession } from '../editor/session';
 import type { ProjectStore } from '../project/store';
+import { functionAt, type FunctionHit } from '../source/functions';
 import { tokenize, type TokenType } from '../source/tokenizer';
 import { COLORS, KNOB_TINTS, MONO } from '../theme';
 import { CanvasPanel, type PanelPointerEvent } from './panel';
@@ -65,6 +67,10 @@ export class CodePanel extends CanvasPanel {
   private lines: Segment[][] = [];
   private linesFor = '';
   private hovering = false;
+  /** The library function name under the pointer, underlined. */
+  private fnHover: FunctionHit | null = null;
+  /** Called when the hovered function name changes. */
+  onFunctionHover: ((hit: FunctionHit | null) => void) | null = null;
   private charW = 16;
   /** Horizontal scroll, in display columns (editing only). */
   private scrollCol = 0;
@@ -110,6 +116,7 @@ export class CodePanel extends CanvasPanel {
         this.invalidate();
       }
       if (s.ui.editorOpen && !prev.ui.editorOpen) this.resetBlink();
+      if (s.project.source !== prev.project.source && !this.session) this.setFunctionHover(null);
     });
     session?.subscribe((u) => this.onEditorUpdate(u));
     void document.fonts?.ready.then(() => this.invalidate());
@@ -206,6 +213,7 @@ export class CodePanel extends CanvasPanel {
   }
 
   private onEditorUpdate(u: ViewUpdate | null) {
+    if (u?.docChanged) this.setFunctionHover(null);
     if (u && (u.docChanged || u.selectionSet)) {
       this.resetBlink();
       // Follow the caret when it moved because of typing or keys, not scrolling.
@@ -411,6 +419,18 @@ export class CodePanel extends CanvasPanel {
         ctx.fillRect(x - 1.5, top + i * CODE_LINE_PX + 3, 3.5, CODE_LINE_PX - 6);
       }
     }
+    if (this.fnHover) {
+      const { from, to } = this.fnHover;
+      const start = text.lastIndexOf('\n', from - 1) + 1;
+      const end = text.indexOf('\n', from);
+      const lineText = text.slice(start, end === -1 ? undefined : end);
+      const i = text.slice(0, from).split('\n').length - 1 - first;
+      if (i >= 0 && i < visible) {
+        const x0 = colX(columnOf(lineText, from - start));
+        ctx.fillStyle = COLORS.accent;
+        ctx.fillRect(x0, top + (i + 1) * CODE_LINE_PX - 5, colX(columnOf(lineText, to - start)) - x0, 3);
+      }
+    }
     ctx.restore();
 
     // "Make knob" chip by the selection end.
@@ -529,6 +549,28 @@ export class CodePanel extends CanvasPanel {
     }
   }
 
+  /** Source offset of the character drawn at panel pixel (x, y), if any. */
+  private charAt(px: number, py: number): number | null {
+    const row = Math.floor((py - this.oy - HEADER - PAD) / CODE_LINE_PX);
+    if (row < 0 || row >= this.visibleLines || px - this.ox < TEXT_X) return null;
+    const lines = this.text.split('\n');
+    const n = this.store.getState().ui.codeScrollLine + row;
+    const line = lines[n];
+    if (line === undefined) return null;
+    const scrollCol = this.editing ? this.scrollCol : 0;
+    // The cell containing the column, not the nearest boundary.
+    const ch = offsetAt(line, (px - this.ox - TEXT_X) / this.charW + scrollCol - 0.5);
+    if (ch >= line.length) return null;
+    return lines.slice(0, n).reduce((at, l) => at + l.length + 1, 0) + ch;
+  }
+
+  private setFunctionHover(hit: FunctionHit | null) {
+    if (hit?.from === this.fnHover?.from && hit?.fn === this.fnHover?.fn) return;
+    this.fnHover = hit;
+    this.invalidate();
+    this.onFunctionHover?.(hit);
+  }
+
   onPointer(e: PanelPointerEvent): boolean | void {
     if (e.kind === 'hover' || e.kind === 'leave') {
       const h = e.kind === 'hover';
@@ -536,6 +578,8 @@ export class CodePanel extends CanvasPanel {
         this.hovering = h;
         this.invalidate();
       }
+      const pos = h ? this.charAt(e.x, e.y) : null;
+      this.setFunctionHover(pos === null ? null : functionAt(this.text, pos));
       return;
     }
     if (e.kind === 'wheel') {
