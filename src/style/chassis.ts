@@ -110,6 +110,40 @@ function rivets(outer: PanelShape, bezel: number): { x: number; y: number }[] {
   return pts.filter((p) => outer.contains(p.x, p.y) && !screen.contains(p.x, p.y));
 }
 
+/**
+ * Drops the triangles of a panel-sized grid that lie wholly in the screen
+ * opening or wholly outside the silhouette. Those pixels would be discarded by
+ * the alpha test anyway, but only after the full metal shading had run on
+ * them, which made the chassis the costliest thing in the cockpit to draw.
+ */
+export function ringOnly(g: THREE.BufferGeometry, outer: PanelShape, screen: PanelShape): THREE.BufferGeometry {
+  const uv = g.getAttribute('uv');
+  const index = g.getIndex()!;
+  const W = outer.width;
+  const H = outer.height;
+  // A triangle sits in one grid cell, so every point of it is within a cell
+  // diagonal of each corner: shapes moved by that much make the tests safe.
+  let cell = 0;
+  for (let t = 0; t < 3; t++) {
+    const a = index.getX(t);
+    const b = index.getX((t + 1) % 3);
+    cell = Math.max(cell, Math.hypot((uv.getX(a) - uv.getX(b)) * W, (uv.getY(a) - uv.getY(b)) * H));
+  }
+  const deepInScreen = grown(screen, -cell);
+  const nearOuter = grown(outer, cell);
+  const px = (i: number) => [uv.getX(i) * W, (1 - uv.getY(i)) * H] as const;
+  const kept: number[] = [];
+  for (let t = 0; t < index.count; t += 3) {
+    const tri = [index.getX(t), index.getX(t + 1), index.getX(t + 2)];
+    const pts = tri.map(px);
+    if (pts.every(([x, y]) => deepInScreen.contains(x, y))) continue;
+    if (pts.every(([x, y]) => !nearOuter.contains(x, y))) continue;
+    kept.push(...tri);
+  }
+  g.setIndex(kept);
+  return g;
+}
+
 export class Chassis {
   readonly mesh: THREE.Mesh;
   readonly material: THREE.MeshPhysicalMaterial;
@@ -152,7 +186,11 @@ export class Chassis {
   /** Rebuilds geometry (in front of the screen) and repaints the chassis. */
   build(rect: Rect, radius: number, screenInset: number, outer: PanelShape, bezel: number): void {
     this.mesh.geometry.dispose();
-    this.mesh.geometry = spherePatchGeometry(rect.x, rect.y, rect.w, rect.h, radius, screenInset + CHASSIS_DEPTH);
+    // Grid cells about half a bezel wide, so trimming leaves a close ring.
+    const segX = Math.max(48, Math.round(outer.width / (bezel / 2)));
+    const segY = Math.max(48, Math.round(outer.height / (bezel / 2)));
+    const g = spherePatchGeometry(rect.x, rect.y, rect.w, rect.h, radius, screenInset + CHASSIS_DEPTH, segX, segY);
+    this.mesh.geometry = ringOnly(g, outer, screenShapeFor(outer, bezel));
     this.paint(outer, bezel, (outer.width / rect.w) * SWEEP_UNITS);
   }
 
