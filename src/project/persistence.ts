@@ -2,6 +2,7 @@
 
 import { migrate, type Project } from './schema';
 import { bakeAll } from '../source/rewrite';
+import { preludeFor } from '../shader/stdlib';
 import type { ProjectStore } from './store';
 
 export interface ProjectStorage {
@@ -55,8 +56,12 @@ export const exportProjectJson = (p: Project): string => JSON.stringify(p, null,
 
 export const importProjectJson = (text: string): Project => migrate(JSON.parse(text));
 
-export const exportBakedGlsl = (p: Project): string =>
-  bakeAll(p.source, p.knobs.map((k) => ({ param: k.param, value: k.value, type: k.type })));
+/** A standalone Shadertoy shader: knobs baked, library functions included. */
+export function exportBakedGlsl(p: Project): string {
+  const baked = bakeAll(p.source, p.knobs.map((k) => ({ param: k.param, value: k.value, type: k.type })));
+  const lib = preludeFor(baked);
+  return lib ? `// SHADERVERSE standard library\n${lib}\n${baked}` : baked;
+}
 
 export function downloadText(filename: string, text: string, mime = 'text/plain'): void {
   const url = URL.createObjectURL(new Blob([text], { type: mime }));

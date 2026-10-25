@@ -16,6 +16,7 @@ import { screenBounds, screenPoint, type ScreenRect } from './panels/bounds';
 import { CodePanel } from './panels/code';
 import { wallToWorld } from './panels/patch';
 import { onPanelRedraw } from './panels/panel';
+import { PlotPanel } from './panels/plot';
 import { PointerRouter } from './panels/pointer';
 import { PortalBezel, PortalPanel, PortalRim } from './panels/portal';
 import { LibraryPanel, StatusPanel, type LibraryActions } from './panels/status';
@@ -75,6 +76,10 @@ export function startApp(root: HTMLElement): void {
     ? new EditorOverlay(store, () => overlayBounds())
     : new SceneEditor(store, () => overlayBounds());
   const code = new CodePanel(cfg, store, editor instanceof SceneEditor ? editor.session : null);
+  const plot = new PlotPanel(cfg);
+  // Hovering a function name in the source, curved or overlay, plots it.
+  code.onFunctionHover = (hit) => plot.show(hit?.fn ?? null);
+  if (editor instanceof EditorOverlay) editor.onFunctionHover = (hit) => plot.show(hit?.fn ?? null);
   if (editor instanceof SceneEditor) editor.setTarget(code);
   const status = new StatusPanel(cfg, store, runtime);
   const helpOverlay = new HelpOverlay();
@@ -109,9 +114,9 @@ export function startApp(root: HTMLElement): void {
   const library = new LibraryPanel(cfg, store, libraryActions);
   const knobs = new KnobBank(cfg, store);
 
-  cockpit.scene.add(code.caret, portal.hole, bezel.group, knobs.tubes.group, rim.mesh, portal.mesh, code.mesh, status.mesh, library.mesh, knobs.group);
+  cockpit.scene.add(code.caret, portal.hole, bezel.group, knobs.tubes.group, rim.mesh, portal.mesh, plot.mesh, code.mesh, status.mesh, library.mesh, knobs.group);
   const aniso = renderer.capabilities.getMaxAnisotropy();
-  for (const p of [rim, code, status, library]) p.setAnisotropy(aniso);
+  for (const p of [rim, plot, code, status, library]) p.setAnisotropy(aniso);
   knobs.setAnisotropy(aniso);
 
   const router = new PointerRouter(canvas, cockpit.camera);
@@ -145,6 +150,14 @@ export function startApp(root: HTMLElement): void {
     popover.close();
     helpOverlay.hide();
   };
+
+  // Looking toward the panels the pointer is over: the source side or the
+  // readouts. Anywhere on the page counts, overlays included.
+  window.addEventListener('pointermove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    cockpit.setFocus(cockpit.sideAt(((e.clientX - r.left) / r.width) * 2 - 1));
+  });
+  document.documentElement.addEventListener('pointerleave', () => cockpit.setFocus(null));
 
   // Store → runtime
   const compile = () => {
@@ -251,7 +264,7 @@ export function startApp(root: HTMLElement): void {
     contextLost = false;
     compositor.resize();
     runtime.recompile(store.getState().project.source);
-    for (const p of [rim, code, status, library]) p.invalidate();
+    for (const p of [rim, plot, code, status, library]) p.invalidate();
     for (const s of knobs.slots) s.face.invalidate();
     toast('Graphics context restored.');
   });
@@ -275,6 +288,7 @@ export function startApp(root: HTMLElement): void {
     }
     runtime.render(dt);
     rim.update();
+    plot.update();
     code.update();
     status.update();
     library.update();
@@ -289,6 +303,7 @@ export function startApp(root: HTMLElement): void {
     portal.rebuild(cfg);
     rim.relayout(cfg);
     bezel.relayout(cfg);
+    plot.relayout(cfg);
     code.relayout(cfg);
     status.relayout(cfg);
     library.relayout(cfg);
@@ -306,7 +321,7 @@ export function startApp(root: HTMLElement): void {
   // Handles for browser tests and debugging; not part of any public API.
   Object.assign(window, {
     __sv: {
-      store, runtime, router, cockpit, code, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
+      store, runtime, router, cockpit, code, plot, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
       knobPoint: (slot: number) => screenPoint(knobs.slots[slot]!.anchor(), cockpit.camera, canvas),
       bounds: overlayBounds,
       /** Screen point of a source offset on the curved code panel. */

@@ -1,10 +1,13 @@
-# Builds the app and publishes it to GitHub Pages on every push to main.
+# Checks pull requests to main (unit tests, lint, typecheck, build) and
+# publishes the app to GitHub Pages on every push to main.
 # One-time setup: repository Settings → Pages → Source: "GitHub Actions".
 
 name: Deploy to GitHub Pages
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -13,9 +16,10 @@ permissions:
   pages: write
   id-token: write
 
+# Pull request checks replace each other; deploys run to completion in order.
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -28,12 +32,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run lint
+      # Typechecks, then builds into dist/.
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:

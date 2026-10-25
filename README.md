@@ -80,6 +80,29 @@ The app wraps your source in a hidden GLSL ES 3.00 shader. Error line numbers
 refer to your own code. When an edit fails to compile, the last good shader
 keeps running.
 
+## Standard library
+
+Every shader can call a small library of named functions, defined for
+`float`, `vec2`, `vec3` and `vec4`. Use them instead of writing the same
+arithmetic inline; the examples do.
+
+| Function | Basic form |
+|---|---|
+| `reciprocal(x)` | f(x) = 1/x |
+| `square(x)` | f(x) = x² |
+| `gaussian(x)` | f(x) = e^(−x²) |
+| `sigmoid(x)` | f(x) = 1 / (1 + e^(−x)) |
+| `wave(x)` | f(x) = ½ + ½·cos(x) |
+| `triangle(x)` | f(x) = \|2·fract(x) − 1\| |
+| `tonemap(x)` | f(x) = 1 − e^(−x) |
+
+Hover a function name in the source (a library function or a common GLSL
+built-in such as `sin`, `fract` or `smoothstep`) and the function plot above
+the source draws its basic form with its name and formula. A shader that
+defines a function of the same name itself keeps its own. Exported `.glsl`
+includes the library functions it uses, so it still runs on Shadertoy. The
+catalog lives in [src/shader/stdlib.ts](src/shader/stdlib.ts).
+
 ## How knobs work
 
 Knobs are extra `float` or `int` parameters of `mainImage`:

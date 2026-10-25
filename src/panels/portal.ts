@@ -2,6 +2,7 @@
 // circular mask. Pointer input becomes iMouse in the shader's pixel space.
 
 import * as THREE from 'three';
+import { gunmetalMaterial } from '../style/chassis';
 import { physicalMaterial } from '../style/quality';
 import type { LayoutConfig } from '../cockpit/layout';
 import type { ShaderRuntime } from '../shader/runtime';
@@ -38,16 +39,7 @@ void main() {
 /** Chrome bezel rings and rivets around the portal: real geometry, lit by the environment. */
 export class PortalBezel {
   readonly group = new THREE.Group();
-  private readonly chrome = physicalMaterial({
-    color: '#b9c9cd',
-    metalness: 1,
-    roughness: 0.14,
-    clearcoat: 1,
-    clearcoatRoughness: 0.06,
-    iridescence: 0.6,
-    iridescenceIOR: 1.35,
-    iridescenceThicknessRange: [180, 560],
-  });
+  private readonly chrome = gunmetalMaterial();
   private readonly dark = physicalMaterial({ color: '#141b1d', metalness: 0.85, roughness: 0.35 });
 
   constructor(cfg: LayoutConfig) {

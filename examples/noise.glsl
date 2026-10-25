@@ -12,7 +12,7 @@ float noise(vec2 p)
 {
     vec2 i = floor(p);
     vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
+    vec2 u = smoothstep(0.0, 1.0, f);
     return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x),
                mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
 }
@@ -42,7 +42,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord,
                   fbm(p + warp * q + vec2(8.3, 2.8), octaves));
     float f = fbm(p + 3.5 * r, octaves);
 
-    vec3 col = mix(vec3(0.05, 0.10, 0.20), vec3(0.90, 0.55, 0.20), clamp(f * f * 2.0, 0.0, 1.0));
+    vec3 col = mix(vec3(0.05, 0.10, 0.20), vec3(0.90, 0.55, 0.20), clamp(square(f) * 2.0, 0.0, 1.0));
     col = mix(col, vec3(0.10, 0.65, 0.80), clamp(length(q), 0.0, 1.0) * 0.6);
     col *= 0.6 + bright * f;
 

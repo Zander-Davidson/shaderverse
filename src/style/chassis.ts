@@ -12,6 +12,9 @@ import type { Rect } from '../cockpit/layout';
 /** How far the chassis stands in front of its screen, in world units. */
 export const CHASSIS_DEPTH = 0.07;
 
+/** Wall units the metal's light-to-dark sweep spans, the same on every panel. */
+const SWEEP_UNITS = 8;
+
 export interface ChassisStyle {
   /** Base metal, dark to light. */
   metal: [string, string, string];
@@ -26,6 +29,23 @@ export const GUNMETAL: ChassisStyle = {
   glow: '#3ff2c4',
   iridescence: 0.55,
 };
+
+/**
+ * The chassis metal as a plain material, for the cockpit's other hardware
+ * (knobs, tubing, the portal bezel), so everything reads as one finish.
+ */
+export function gunmetalMaterial(style: ChassisStyle = GUNMETAL): THREE.MeshPhysicalMaterial {
+  return physicalMaterial({
+    color: '#4a6168',
+    metalness: 0.92,
+    roughness: 0.3,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.18,
+    iridescence: style.iridescence,
+    iridescenceIOR: 1.35,
+    iridescenceThicknessRange: [180, 520],
+  });
+}
 
 /** The screen opening inside an outer silhouette, `bezel` pixels in. */
 export function screenShapeFor(outer: PanelShape, bezel: number): PanelShape {
@@ -90,6 +110,40 @@ function rivets(outer: PanelShape, bezel: number): { x: number; y: number }[] {
   return pts.filter((p) => outer.contains(p.x, p.y) && !screen.contains(p.x, p.y));
 }
 
+/**
+ * Drops the triangles of a panel-sized grid that lie wholly in the screen
+ * opening or wholly outside the silhouette. Those pixels would be discarded by
+ * the alpha test anyway, but only after the full metal shading had run on
+ * them, which made the chassis the costliest thing in the cockpit to draw.
+ */
+export function ringOnly(g: THREE.BufferGeometry, outer: PanelShape, screen: PanelShape): THREE.BufferGeometry {
+  const uv = g.getAttribute('uv');
+  const index = g.getIndex()!;
+  const W = outer.width;
+  const H = outer.height;
+  // A triangle sits in one grid cell, so every point of it is within a cell
+  // diagonal of each corner: shapes moved by that much make the tests safe.
+  let cell = 0;
+  for (let t = 0; t < 3; t++) {
+    const a = index.getX(t);
+    const b = index.getX((t + 1) % 3);
+    cell = Math.max(cell, Math.hypot((uv.getX(a) - uv.getX(b)) * W, (uv.getY(a) - uv.getY(b)) * H));
+  }
+  const deepInScreen = grown(screen, -cell);
+  const nearOuter = grown(outer, cell);
+  const px = (i: number) => [uv.getX(i) * W, (1 - uv.getY(i)) * H] as const;
+  const kept: number[] = [];
+  for (let t = 0; t < index.count; t += 3) {
+    const tri = [index.getX(t), index.getX(t + 1), index.getX(t + 2)];
+    const pts = tri.map(px);
+    if (pts.every(([x, y]) => deepInScreen.contains(x, y))) continue;
+    if (pts.every(([x, y]) => !nearOuter.contains(x, y))) continue;
+    kept.push(...tri);
+  }
+  g.setIndex(kept);
+  return g;
+}
+
 export class Chassis {
   readonly mesh: THREE.Mesh;
   readonly material: THREE.MeshPhysicalMaterial;
@@ -132,11 +186,16 @@ export class Chassis {
   /** Rebuilds geometry (in front of the screen) and repaints the chassis. */
   build(rect: Rect, radius: number, screenInset: number, outer: PanelShape, bezel: number): void {
     this.mesh.geometry.dispose();
-    this.mesh.geometry = spherePatchGeometry(rect.x, rect.y, rect.w, rect.h, radius, screenInset + CHASSIS_DEPTH);
-    this.paint(outer, bezel);
+    // Grid cells about half a bezel wide, so trimming leaves a close ring.
+    const segX = Math.max(48, Math.round(outer.width / (bezel / 2)));
+    const segY = Math.max(48, Math.round(outer.height / (bezel / 2)));
+    const g = spherePatchGeometry(rect.x, rect.y, rect.w, rect.h, radius, screenInset + CHASSIS_DEPTH, segX, segY);
+    this.mesh.geometry = ringOnly(g, outer, screenShapeFor(outer, bezel));
+    this.paint(outer, bezel, (outer.width / rect.w) * SWEEP_UNITS);
   }
 
-  private paint(outer: PanelShape, bezel: number) {
+  /** `sweep`: panel pixels the metal gradient spans. */
+  private paint(outer: PanelShape, bezel: number, sweep: number) {
     const s = this.scale;
     const W = Math.round(outer.width * s);
     const H = Math.round(outer.height * s);
@@ -147,7 +206,7 @@ export class Chassis {
     const screen = screenShapeFor(outer, bezel);
     const pins = rivets(outer, bezel);
     this.paintHeight(outer, screen, bezel, pins);
-    this.paintColor(outer, screen, bezel, pins);
+    this.paintColor(outer, screen, bezel, pins, sweep);
     this.bakeNormals();
     this.colorTex.needsUpdate = true;
     this.normalTex.needsUpdate = true;
@@ -192,7 +251,7 @@ export class Chassis {
     }
   }
 
-  private paintColor(outer: PanelShape, screen: PanelShape, bezel: number, pins: { x: number; y: number }[]) {
+  private paintColor(outer: PanelShape, screen: PanelShape, bezel: number, pins: { x: number; y: number }[], sweep: number) {
     const ctx = this.color.getContext('2d')!;
     const s = this.scale;
     const W = this.color.width;
@@ -201,8 +260,10 @@ export class Chassis {
     const [dark, mid, light] = this.style.metal;
     ctx.save();
     clipRegion(ctx, outer, s);
-    // Metal with a soft top-left key and brushed streaks.
-    const g = ctx.createLinearGradient(0, 0, W * 0.35, H);
+    // Metal with a soft top-left key and brushed streaks. The sweep has a
+    // fixed size in the wall, so small panels aren't all highlight.
+    const L = sweep * s;
+    const g = ctx.createLinearGradient(0, 0, L * 0.35 * (W / H), L);
     g.addColorStop(0, light);
     g.addColorStop(0.18, mid);
     g.addColorStop(0.6, dark);

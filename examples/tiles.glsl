@@ -21,7 +21,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord,
     float d = abs(abs(f.x + f.y) - 0.5) / 1.4142;
     float line = smoothstep(0.08, 0.0, d - thickness);
 
-    vec3 base = 0.5 + 0.5 * cos(6.2831 * (hash(cell + 3.0) * hueSpread + vec3(0.0, 0.33, 0.67)) + iTime * pulse);
+    vec3 base = wave(6.2831 * (hash(cell + 3.0) * hueSpread + vec3(0.0, 0.33, 0.67)) + iTime * pulse);
     vec3 col = mix(vec3(0.02, 0.03, 0.05), base, line);
 
     fragColor = vec4(col, 1.0);

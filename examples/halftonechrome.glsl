@@ -35,13 +35,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord,
     // Chrome: reflect a horizon with a bright band.
     float ry = reflect(vec3(0.0, 0.0, -1.0), n).y;
     float env = smoothstep(-0.2, 0.6, ry) + smoothstep(0.04, 0.0, abs(ry - 0.3)) * 1.5;
-    vec3 film = 0.5 + 0.5 * cos(6.2831 * (n.x * 0.8 + n.y * 0.5 + t * 0.1 + vec3(0.0, 0.33, 0.67)));
+    vec3 film = wave(6.2831 * (n.x * 0.8 + n.y * 0.5 + t * 0.1 + vec3(0.0, 0.33, 0.67)));
     vec3 metal = mix(vec3(env), film * (0.4 + env), chrome);
 
     float inside = smoothstep(0.004, -0.004, d);
     // Spectral glow around the outline.
     float edge = exp(-abs(d) * 30.0 / glow);
-    vec3 halo = (0.5 + 0.5 * cos(6.2831 * (d * 4.0 - t * 0.2 + vec3(0.0, 0.33, 0.67)))) * edge;
+    vec3 halo = wave(6.2831 * (d * 4.0 - t * 0.2 + vec3(0.0, 0.33, 0.67))) * edge;
 
     vec3 tone = metal * inside + halo * (1.0 - inside);
     float lum = dot(tone, vec3(0.299, 0.587, 0.114));
