@@ -2,7 +2,8 @@ import { expect, type Page } from '@playwright/test';
 
 /** Loads the app with a fresh project and waits for the first compile. */
 export async function openApp(page: Page) {
-  await page.goto('/?noboot');
+  // Low graphics: the tests render on a software GPU.
+  await page.goto('/?noboot&gfx=low');
   await page.waitForFunction(() => {
     const sv = (window as any).__sv;
     return sv && sv.store.getState().compile.status === 'ok' && sv.runtime.frame > 2;

@@ -2,10 +2,12 @@
 // circular mask. Pointer input becomes iMouse in the shader's pixel space.
 
 import * as THREE from 'three';
+import { physicalMaterial } from '../style/quality';
 import type { LayoutConfig } from '../cockpit/layout';
 import type { ShaderRuntime } from '../shader/runtime';
 import { CanvasPanel, type PanelPointerEvent, type PointerTarget } from './panel';
 import { spherePatchGeometry } from './patch';
+import { HOLE_FRAG, HOLE_VERT, UNDER_LAYER } from '../cockpit/compositor';
 
 const PORTAL_FRAG = /* glsl */ `
 uniform sampler2D map;
@@ -16,6 +18,7 @@ void main() {
   float r = length(p);
   float aa = fwidth(r) * 1.5;
   float mask = 1.0 - smoothstep(1.0 - aa, 1.0, r);
+  if (mask < 0.01) discard;
   vec3 col = texture2D(map, vUv).rgb;
   // A faint glass edge so the shader reads as seen through a window.
   col *= 1.0 - 0.35 * smoothstep(0.82, 1.0, r);
@@ -32,12 +35,69 @@ void main() {
 }
 `;
 
+/** Chrome bezel rings and rivets around the portal: real geometry, lit by the environment. */
+export class PortalBezel {
+  readonly group = new THREE.Group();
+  private readonly chrome = physicalMaterial({
+    color: '#b9c9cd',
+    metalness: 1,
+    roughness: 0.14,
+    clearcoat: 1,
+    clearcoatRoughness: 0.06,
+    iridescence: 0.6,
+    iridescenceIOR: 1.35,
+    iridescenceThicknessRange: [180, 560],
+  });
+  private readonly dark = physicalMaterial({ color: '#141b1d', metalness: 0.85, roughness: 0.35 });
+
+  constructor(cfg: LayoutConfig) {
+    this.relayout(cfg);
+  }
+
+  relayout(cfg: LayoutConfig) {
+    for (const c of [...this.group.children]) {
+      this.group.remove(c);
+      (c as THREE.Mesh).geometry?.dispose();
+    }
+    const R = cfg.radius;
+    const pr = cfg.portal.size / 2;
+    // A flat ring of radius r sits where the dome is at that radius: the dome
+    // bows toward the camera (+z here) by about r² / 2R.
+    const ringAt = (r: number, tube: number, mat: THREE.Material, lift: number) => {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 24, 160), mat);
+      m.position.z = (r * r) / (2 * R) + lift;
+      this.group.add(m);
+    };
+    ringAt(pr * 1.01, 0.055, this.chrome, 0.05);
+    ringAt(pr * 1.075, 0.022, this.dark, 0.03);
+    ringAt(pr * 1.15, 0.04, this.chrome, 0.04);
+    // Rivets between the rings.
+    const rivet = new THREE.SphereGeometry(0.034, 20, 12);
+    const n = 24;
+    const rr = pr * 1.112;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const m = new THREE.Mesh(rivet, this.chrome);
+      m.position.set(Math.cos(a) * rr, Math.sin(a) * rr, (rr * rr) / (2 * R) + 0.03);
+      m.scale.z = 0.6;
+      this.group.add(m);
+    }
+    // Centered on the portal, facing the sphere's center (the camera).
+    const c = new THREE.Vector3(-R * Math.sin(cfg.portal.x / R) * Math.cos(cfg.portal.y / R), R * Math.sin(cfg.portal.y / R), R * Math.cos(cfg.portal.y / R) * Math.cos(cfg.portal.x / R));
+    this.group.position.copy(c);
+    this.group.lookAt(0, 0, 0);
+  }
+}
+
 export class PortalPanel implements PointerTarget {
   readonly mesh: THREE.Mesh;
   readonly material: THREE.ShaderMaterial;
   pixelWidth: number;
   pixelHeight: number;
   private down = false;
+  private downAt = { x: 0, y: 0, moved: 0 };
+  /** Called for a click (no drag) on the portal; a drag is mouse input to the shader. */
+  onClick: (() => void) | null = null;
 
   constructor(
     private readonly runtime: ShaderRuntime,
@@ -53,7 +113,16 @@ export class PortalPanel implements PointerTarget {
     });
     this.mesh = new THREE.Mesh(this.geometry(cfg), this.material);
     this.mesh.renderOrder = 2;
+    // The portal changes every frame, so it renders live under the cached
+    // cockpit; in the cache, a transparent disc stands in for it.
+    this.mesh.layers.set(UNDER_LAYER);
+    this.hole = new THREE.Mesh(
+      this.mesh.geometry,
+      new THREE.ShaderMaterial({ vertexShader: HOLE_VERT, fragmentShader: HOLE_FRAG, blending: THREE.NoBlending }),
+    );
   }
+
+  readonly hole: THREE.Mesh;
 
   get meshes() {
     return [this.mesh];
@@ -67,6 +136,7 @@ export class PortalPanel implements PointerTarget {
   rebuild(cfg: LayoutConfig) {
     this.mesh.geometry.dispose();
     this.mesh.geometry = this.geometry(cfg);
+    this.hole.geometry = this.mesh.geometry;
   }
 
   onPointer(e: PanelPointerEvent): boolean {
@@ -76,15 +146,18 @@ export class PortalPanel implements PointerTarget {
     const sy = e.v * this.runtime.size; // Shadertoy: origin bottom-left
     if (e.kind === 'down' && e.button === 0 && inside) {
       this.down = true;
+      this.downAt = { x: e.clientX, y: e.clientY, moved: 0 };
       this.runtime.pointer(sx, sy, true, true);
       return true;
     }
-    if (e.kind === 'move' && this.down && Number.isFinite(sx)) {
-      this.runtime.pointer(sx, sy, true, false);
+    if (e.kind === 'move' && this.down) {
+      this.downAt.moved = Math.max(this.downAt.moved, Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y));
+      if (Number.isFinite(sx)) this.runtime.pointer(sx, sy, true, false);
     }
     if (e.kind === 'up' && this.down) {
       this.down = false;
       this.runtime.pointer(sx, sy, false, false);
+      if (this.downAt.moved < 5) this.onClick?.();
     }
     return false;
   }

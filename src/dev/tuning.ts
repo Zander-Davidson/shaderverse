@@ -31,6 +31,7 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
   ring.add(cfg.knobRing, 'radius', 1, 5, 0.01).onChange(onChange);
   ring.add(cfg.knobRing, 'size', 0.4, 2, 0.01).onChange(onChange);
   ring.add(cfg.knobRing, 'startDeg', 0, 360, 1).onChange(onChange);
+  ring.add(cfg.knobRing, 'stepDeg', 5, 45, 0.5).onChange(onChange);
 
   gui.add(
     {

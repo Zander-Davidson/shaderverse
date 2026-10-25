@@ -237,3 +237,15 @@ kbd {
 .sv-fatal p { color: var(--dim); line-height: 1.6; font-family: var(--sans); }
 
 .lil-gui.root { z-index: 60; }
+
+/* In-scene editor input layer: invisible, but focusable and laid out so
+   CodeMirror can measure lines and IME windows open near the panel. */
+.sv-scene-input {
+  position: fixed;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.sv-scene-input .cm-editor { height: 100%; font: 14px var(--mono); }
+.sv-scene-input .cm-editor.cm-focused { outline: none; }

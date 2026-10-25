@@ -27,6 +27,14 @@ This builds the image and serves the app at <http://localhost:8080>. Options:
 | `./buildrun.sh --detach` | Run in the background (`docker stop shaderverse` to stop) |
 | `./buildrun.sh --open` | Also open the app in your default browser |
 
+### On GitHub Pages
+
+`.github/workflows/pages.yml` builds the app and publishes it on every push to
+`main`. One-time setup: in the repository, open Settings → Pages and set
+Source to "GitHub Actions". The site is then served at
+`https://<user>.github.io/<repo>/` (the build uses relative paths, so any
+subpath works).
+
 ### For development
 
 Requires Node 22 or later.
@@ -38,8 +46,15 @@ npm run dev
 
 Then open <http://localhost:5173>. Development builds include a cockpit tuning
 panel (top right) for sphere radius, eye distance and layout; "copy config"
-prints values to paste into `src/cockpit/layout.ts`. Add `?noboot` to the URL
-to skip the startup sequence.
+prints values to paste into `src/cockpit/layout.ts`.
+
+URL options:
+
+| Option | Effect |
+|---|---|
+| `?noboot` | Skip the startup sequence |
+| `?gfx=low` | Low graphics for weak or software GPUs: no chrome backdrop, area lights, clearcoat or iridescence, and pixel ratio 1 |
+| `?editor=overlay` | Edit in the flat overlay window instead of on the curved panel |
 
 | Command | What it does |
 |---|---|
@@ -74,9 +89,10 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord,
                in float ringFreq, in float speed)
 ```
 
-- **Create.** Open the editor (click the code display), select a number
-  inside `mainImage` and press <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> or the
-  "make knob" button. The number becomes a named parameter. The knob starts
+- **Create.** Click into the code on the curved source panel (it is the
+  editor: typing, selection, undo and clipboard all work in place), select a
+  number inside `mainImage` — double-click selects a whole literal — and press
+  <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> or the "make knob" chip. The number becomes a named parameter. The knob starts
   at that number, so the image doesn't change, and one undo reverts it.
 - **Turn.** Drag a knob vertically. Hold <kbd>Shift</kbd> for fine control,
   and double-click to reset. Turning a knob only updates a uniform; it never
@@ -90,7 +106,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord,
 Numbers that can't become knobs are declined with a reason. These are numbers
 in helper functions (which can't see `mainImage` parameters), in `const`
 initializers, array sizes, `case` labels, preprocessor lines, and unsigned
-literals. There are eight knob slots.
+literals. There are eight knob slots, in an arc beside the portal; a slot's tube to
+the source window glows with flowing fluid while it holds a knob.
 
 ## Projects
 
@@ -109,8 +126,17 @@ The current project autosaves in the browser. The library panel can:
 | <kbd>R</kbd> | Restart time |
 | <kbd>Q</kbd> | Cycle render quality |
 | <kbd>E</kbd> / <kbd>Enter</kbd> | Open the editor |
-| <kbd>1</kbd>–<kbd>4</kbd> | New project from an example |
+| <kbd>1</kbd>–<kbd>9</kbd> | New project from an example |
+| Click the portal | Lean in so the portal and knobs fill the view; click again or <kbd>Esc</kbd> to sit back |
 | <kbd>?</kbd> | Show all controls |
+
+## Rendering
+
+The cockpit is mostly still, so it renders into a cached image and only the
+screen regions that change (a knob turning, a panel redrawing) are re-rendered.
+Each frame draws just the live shader portal, the cached cockpit over it, the
+flowing fluid in active knob tubes, and the caret. Camera moves (leaning in and
+out) re-render everything while they last. See `src/cockpit/compositor.ts`.
 
 ## Layout
 
@@ -119,7 +145,9 @@ src/
   shader/     wrapper, compile validator, error parser, runtime
   source/     tokenizer, mainImage locator, literal checks, rewrites, reconciliation
   project/    store, actions and log, schema, persistence
-  cockpit/    sphere, camera, layout config
+  cockpit/    sphere, camera, layout config, frame compositor
+  editor/     editing engine shared by the in-scene and overlay editors
+  style/      chrome chassis, LCD screens, liquid-chrome backdrop, quality
   panels/     panel system, pointer picking, portal, code display, status, library
   knobs/      knob objects and interaction
   overlays/   editor, knob popover, boot sequence, help
