@@ -84,6 +84,10 @@ server-backed implementation.
 -   Vector and color knobs, and "replace all occurrences".
 -   Rich biomechanical materials and peripheral systems, expected to
     grow alongside v1.3.
+-   Features drawn from the [reference interfaces](ui.md#reference-interfaces):
+    rendered hands turning knobs, idle camera sway, background detail
+    beyond the cockpit, displays on articulated arms, visible cabling,
+    and whole-cockpit lighting moods.
 
 ## Relationship to the earlier phase plan
 
