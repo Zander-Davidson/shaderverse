@@ -28,15 +28,22 @@ export function spherePatchGeometry(
 ): THREE.BufferGeometry {
   const positions: number[] = [];
   const uvs: number[] = [];
+  const tangents: number[] = [];
   const indices: number[] = [];
   const v = new THREE.Vector3();
   for (let j = 0; j <= segY; j++) {
     const tv = j / segY;
     for (let i = 0; i <= segX; i++) {
       const tu = i / segX;
-      wallToWorld(cx + (tu - 0.5) * w, cy + (tv - 0.5) * h, radius, inset, v);
+      const x = cx + (tu - 0.5) * w;
+      wallToWorld(x, cy + (tv - 0.5) * h, radius, inset, v);
       positions.push(v.x, v.y, v.z);
       uvs.push(tu, tv);
+      // Unit direction of wall +x (u). Without it three.js estimates a normal
+      // map's frame per pixel and scales it by the UVs' steeper axis, which
+      // differs between patches of different shapes and seams where they meet.
+      const az = x / radius;
+      tangents.push(-Math.cos(az), 0, -Math.sin(az), 1);
     }
   }
   const row = segX + 1;
@@ -50,6 +57,7 @@ export function spherePatchGeometry(
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  g.setAttribute('tangent', new THREE.Float32BufferAttribute(tangents, 4));
   g.setIndex(indices);
   g.computeVertexNormals();
   return g;

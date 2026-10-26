@@ -95,9 +95,15 @@ export class Cockpit {
     const env = cockpitEnvironment();
     // Unblurred and much finer than the default: the dome is a concave
     // mirror that magnifies what it reflects about twofold, so polished chrome
-    // needs the detail to stay crisp.
-    this.scene.environment = pmrem.fromScene(env, 0, 0.1, 100, { size: LOW_GFX ? 128 : 1024 }).texture;
+    // needs the detail to stay crisp. Rendered to a cube map first rather than
+    // with pmrem.fromScene(): that draws each face edge to edge with no border,
+    // and the magnified reflection shows a seam where the faces meet.
+    const size = LOW_GFX ? 128 : 1024;
+    const cube = new THREE.WebGLCubeRenderTarget(size, { type: THREE.HalfFloatType, generateMipmaps: false });
+    new THREE.CubeCamera(0.1, 100, cube).update(renderer, env);
+    this.scene.environment = pmrem.fromCubemap(cube.texture).texture;
     this.scene.environmentIntensity = 1;
+    cube.dispose();
     pmrem.dispose();
     env.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
   }

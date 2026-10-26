@@ -320,11 +320,6 @@ export class ChromeConsole {
     this.material.normalMap = detail.normal.texture;
     // The clearcoat must follow the relief too, or it reads as flat glass.
     this.material.clearcoatNormalMap = detail.normal.texture;
-    // Three.js scales a normal map's tangent frame by the UVs' steeper axis,
-    // which flattens tilts along the other one when the patch isn't square.
-    const m = Math.min(w, h);
-    this.material.normalScale.set(w / m, h / m);
-    this.material.clearcoatNormalScale.set(w / m, h / m);
     this.material.needsUpdate = true;
     this.backdropMaterial.normalMap = back.normal.texture;
     this.backdropMaterial.clearcoatNormalMap = back.normal.texture;
