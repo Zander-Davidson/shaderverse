@@ -60,7 +60,7 @@ export const highlight = HighlightStyle.define([
 
 const theme = EditorView.theme(
   {
-    '&': { color: COLORS.text, backgroundColor: 'transparent', height: '100%', fontSize: '13.5px' },
+    '&': { color: COLORS.text, backgroundColor: 'transparent', height: '100%', fontSize: '16.2px' },
     '.cm-scroller': { fontFamily: MONO, lineHeight: '1.55' },
     '.cm-content': { caretColor: COLORS.accent },
     '.cm-cursor, .cm-dropCursor': { borderLeftColor: COLORS.accent, borderLeftWidth: '2px' },

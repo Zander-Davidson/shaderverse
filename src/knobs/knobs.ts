@@ -173,10 +173,10 @@ class KnobFace extends CanvasPanel {
     ctx.shadowBlur = 0;
 
     ctx.fillStyle = tint;
-    arcText(ctx, k.label.toUpperCase(), cx, cy, TEXT_R, 'top', Math.PI * 0.85, (px) => `700 ${px}px ${MONO}`, [30, 26, 22, 19]);
+    arcText(ctx, k.label.toUpperCase(), cx, cy, TEXT_R, 'top', Math.PI * 0.85, (px) => `700 ${px}px ${MONO}`, [36, 31, 26, 23]);
     ctx.fillStyle = this.active ? '#ffffff' : COLORS.text;
     // The value sits in the gap at the bottom of the ring.
-    arcText(ctx, formatValue(k, k.value), cx, cy, TEXT_R, 'bottom', Math.PI * 0.45, (px) => `600 ${px}px ${MONO}`, [30, 26, 22]);
+    arcText(ctx, formatValue(k, k.value), cx, cy, TEXT_R, 'bottom', Math.PI * 0.45, (px) => `600 ${px}px ${MONO}`, [36, 31, 26]);
   }
 }
 

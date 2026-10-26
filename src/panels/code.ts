@@ -21,8 +21,8 @@ import { CanvasPanel, type PanelPointerEvent } from './panel';
 import { PanelShape } from './shape';
 import { drawScreenBackdrop, drawScreenGlare } from '../style/screen';
 
-export const CODE_FONT_PX = 27;
-export const CODE_LINE_PX = 38;
+export const CODE_FONT_PX = 32;
+export const CODE_LINE_PX = 46;
 const HEADER = 70;
 const GUTTER = 86;
 const PAD = 18;
@@ -287,7 +287,7 @@ export class CodePanel extends CanvasPanel {
     ctx.fillRect(4, 4, W - 8, HEADER - 4);
     ctx.fillStyle = editing ? '#2f6a85' : COLORS.faint;
     ctx.fillRect(4, HEADER, W - 8, 2);
-    ctx.font = `600 22px ${MONO}`;
+    ctx.font = `600 26px ${MONO}`;
     ctx.textBaseline = 'middle';
     // Inside the rounded corners.
     const hl = this.shape!.leftLimit(this.oy + 12, this.oy + HEADER - 12) - this.ox + 14;

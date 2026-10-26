@@ -68,7 +68,7 @@ abstract class ReadoutPanel extends CanvasPanel {
     ctx.fillRect(0, 0, this.iw, HEAD);
     ctx.fillStyle = 'rgba(63, 242, 196, 0.35)';
     ctx.fillRect(0, HEAD, this.iw, 2);
-    ctx.font = `700 20px ${MONO}`;
+    ctx.font = `700 24px ${MONO}`;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = PHOSPHOR;
     ctx.fillText(title, this.left(10, HEAD - 10) + 8, 30);
@@ -84,7 +84,7 @@ abstract class ReadoutPanel extends CanvasPanel {
   }
 
   protected label(ctx: CanvasRenderingContext2D, text: string, y: number) {
-    ctx.font = `600 15px ${MONO}`;
+    ctx.font = `600 18px ${MONO}`;
     ctx.fillStyle = COLORS.dim;
     ctx.fillText(text, this.left(y - 10, y + 10), y);
   }
@@ -92,7 +92,7 @@ abstract class ReadoutPanel extends CanvasPanel {
   /** A label on the left and a value on the right of one row. */
   protected row(ctx: CanvasRenderingContext2D, label: string, value: string, y: number) {
     this.label(ctx, label, y);
-    ctx.font = `500 28px ${MONO}`;
+    ctx.font = `500 34px ${MONO}`;
     ctx.fillStyle = COLORS.text;
     ctx.textAlign = 'right';
     ctx.fillText(value, this.right, y);
@@ -121,7 +121,7 @@ abstract class ReadoutPanel extends CanvasPanel {
     const hover = this.hoverButton === id;
     gelButton(ctx, x, y, w, h, { active, hover });
     ctx.fillStyle = active ? '#eafff8' : hover ? '#e2eef0' : '#a9c2c6';
-    ctx.font = `700 ${h < 50 ? 16 : 18}px ${MONO}`;
+    ctx.font = `700 ${h < 50 ? 19 : 22}px ${MONO}`;
     ctx.textAlign = align;
     ctx.save();
     ctx.beginPath();
@@ -182,7 +182,7 @@ export class StatusPanel extends ReadoutPanel {
     ctx.fill();
     ctx.restore();
     ctx.fillStyle = st.c;
-    ctx.font = `600 30px ${MONO}`;
+    ctx.font = `600 36px ${MONO}`;
     ctx.fillText(st.t, this.left(110, 140), 124);
 
     this.row(ctx, 'FPS', this.fps.toFixed(0), 178);
@@ -211,7 +211,7 @@ export class StatusPanel extends ReadoutPanel {
       })),
     );
 
-    ctx.font = `15px ${MONO}`;
+    ctx.font = `18px ${MONO}`;
     ctx.fillStyle = COLORS.dim;
     if (compile.status === 'error') ctx.fillText('LAST GOOD PROGRAM RUNNING', this.left(610, 630), 620);
     const fy = this.ih - 34;
