@@ -2,9 +2,8 @@
 // circular mask. Pointer input becomes iMouse in the shader's pixel space.
 
 import * as THREE from 'three';
-import { gunmetalMaterial } from '../style/chassis';
-import { physicalMaterial } from '../style/quality';
-import type { LayoutConfig } from '../cockpit/layout';
+import { bezelRadius, type LayoutConfig } from '../cockpit/layout';
+import type { RingMold } from '../style/console';
 import type { ShaderRuntime } from '../shader/runtime';
 import { CanvasPanel, type PanelPointerEvent, type PointerTarget } from './panel';
 import { spherePatchGeometry } from './patch';
@@ -36,49 +35,15 @@ void main() {
 }
 `;
 
-/** Chrome bezel rings and rivets around the portal: real geometry, lit by the environment. */
-export class PortalBezel {
-  readonly group = new THREE.Group();
-  private readonly chrome = gunmetalMaterial();
-  private readonly dark = physicalMaterial({ color: '#141b1d', metalness: 0.85, roughness: 0.35 });
+/** Where the console's portal collar rolls down into the rim, as a multiple of the portal radius. */
+const RIM_OPENING = 1.09;
+/** The rim canvas spans this multiple of the portal's size. */
+const RIM_SPAN = 1.16;
 
-  constructor(cfg: LayoutConfig) {
-    this.relayout(cfg);
-  }
-
-  relayout(cfg: LayoutConfig) {
-    for (const c of [...this.group.children]) {
-      this.group.remove(c);
-      (c as THREE.Mesh).geometry?.dispose();
-    }
-    const R = cfg.radius;
-    const pr = cfg.portal.size / 2;
-    // A flat ring of radius r sits where the dome is at that radius: the dome
-    // bows toward the camera (+z here) by about r² / 2R.
-    const ringAt = (r: number, tube: number, mat: THREE.Material, lift: number) => {
-      const m = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 24, 160), mat);
-      m.position.z = (r * r) / (2 * R) + lift;
-      this.group.add(m);
-    };
-    ringAt(pr * 1.01, 0.055, this.chrome, 0.05);
-    ringAt(pr * 1.075, 0.022, this.dark, 0.03);
-    ringAt(pr * 1.15, 0.04, this.chrome, 0.04);
-    // Rivets between the rings.
-    const rivet = new THREE.SphereGeometry(0.034, 20, 12);
-    const n = 24;
-    const rr = pr * 1.112;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const m = new THREE.Mesh(rivet, this.chrome);
-      m.position.set(Math.cos(a) * rr, Math.sin(a) * rr, (rr * rr) / (2 * R) + 0.03);
-      m.scale.z = 0.6;
-      this.group.add(m);
-    }
-    // Centered on the portal, facing the sphere's center (the camera).
-    const c = new THREE.Vector3(-R * Math.sin(cfg.portal.x / R) * Math.cos(cfg.portal.y / R), R * Math.sin(cfg.portal.y / R), R * Math.cos(cfg.portal.y / R) * Math.cos(cfg.portal.x / R));
-    this.group.position.copy(c);
-    this.group.lookAt(0, 0, 0);
-  }
+/** The collar molded into the console around the portal and its rim. */
+export function portalMold(cfg: LayoutConfig): RingMold {
+  const pr = cfg.portal.size / 2;
+  return { x: cfg.portal.x, y: cfg.portal.y, outer: bezelRadius(cfg) + 0.03, opening: pr * RIM_OPENING };
 }
 
 export class PortalPanel implements PointerTarget {
@@ -160,23 +125,25 @@ export class PortalPanel implements PointerTarget {
   }
 }
 
-/** Mechanical rim drawn around the portal; decorative, takes no input. */
+/** Dial ring between the portal and its collar, recessed in the console; decorative, takes no input. */
 export class PortalRim extends CanvasPanel {
   constructor(cfg: LayoutConfig) {
-    const s = cfg.portal.size * 1.16;
+    const s = cfg.portal.size * RIM_SPAN;
     super({ x: cfg.portal.x, y: cfg.portal.y, w: s, h: s }, 1024, 1024, cfg.radius, 0.02);
     this.mesh.renderOrder = 1;
   }
 
   relayout(cfg: LayoutConfig) {
-    const s = cfg.portal.size * 1.16;
+    const s = cfg.portal.size * RIM_SPAN;
     this.rebuild(cfg.radius, { x: cfg.portal.x, y: cfg.portal.y, w: s, h: s });
   }
 
   protected draw(ctx: CanvasRenderingContext2D): void {
     const S = this.pixelWidth;
     const c = S / 2;
-    const inner = (S / 2) / 1.16;
+    const inner = S / 2 / RIM_SPAN;
+    // Out to where the console's collar rises from its floor.
+    const outer = inner * RIM_OPENING;
     ctx.clearRect(0, 0, S, S);
 
     const ring = (r0: number, r1: number, fill: string | CanvasGradient) => {
@@ -186,13 +153,12 @@ export class PortalRim extends CanvasPanel {
       ctx.fillStyle = fill;
       ctx.fill();
     };
-    const g = ctx.createRadialGradient(c, c, inner, c, c, S / 2);
+    const g = ctx.createRadialGradient(c, c, inner, c, c, outer);
     g.addColorStop(0, '#1a232c');
-    g.addColorStop(0.45, '#0e141a');
-    g.addColorStop(1, '#06090c');
-    ring(inner - 2, S / 2 - 4, g);
-    ring(inner - 2, inner + 5, '#24323e');
-    ring(S / 2 - 10, S / 2 - 6, '#18222b');
+    g.addColorStop(0.6, '#0b1116');
+    g.addColorStop(1, '#030507');
+    ring(inner - 2, outer, g);
+    ring(inner - 2, inner + 4, '#24323e');
 
     // Tick marks
     ctx.save();
@@ -202,19 +168,20 @@ export class PortalRim extends CanvasPanel {
       ctx.rotate((Math.PI * 2) / 120);
       ctx.fillStyle = major ? '#4fd1ff' : '#2d3d4a';
       ctx.globalAlpha = major ? 0.8 : 1;
-      ctx.fillRect(inner + 14, -1.5, major ? 22 : 10, 3);
+      ctx.fillRect(inner + 8, -1.5, major ? 18 : 9, 3);
     }
     ctx.globalAlpha = 1;
     ctx.restore();
 
     // Emissive channel
-    ctx.beginPath();
-    ctx.arc(c, c, inner + 46, Math.PI * 0.15, Math.PI * 0.85);
-    ctx.strokeStyle = 'rgba(79, 209, 255, 0.35)';
+    const ch = inner + 32;
     ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(c, c, ch, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.strokeStyle = 'rgba(79, 209, 255, 0.35)';
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(c, c, inner + 46, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.arc(c, c, ch, Math.PI * 1.15, Math.PI * 1.85);
     ctx.strokeStyle = 'rgba(255, 122, 69, 0.3)';
     ctx.stroke();
   }

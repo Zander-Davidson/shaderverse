@@ -39,7 +39,7 @@ abstract class ReadoutPanel extends CanvasPanel {
     const W = this.pixelWidth;
     const H = this.pixelHeight;
     const outer = new PanelShape(W, H, (this.cfg.cornerRadius / this.rect.w) * W, cutCircleFor(this.cfg, this.rect, W, H));
-    this.setChassis(outer, BEZEL, this.cfg.radius);
+    this.setBezel(outer, BEZEL);
   }
 
   /** Left edge for content spanning screen rows y0..y1, clear of the curve. */

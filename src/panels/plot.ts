@@ -48,7 +48,7 @@ export class PlotPanel extends CanvasPanel {
   private reshape(cfg: LayoutConfig) {
     const W = this.pixelWidth;
     const outer = new PanelShape(W, this.pixelHeight, (cfg.cornerRadius / cfg.plot.w) * W, null);
-    this.setChassis(outer, BEZEL, cfg.radius);
+    this.setBezel(outer, BEZEL);
   }
 
   protected draw(ctx: CanvasRenderingContext2D): void {

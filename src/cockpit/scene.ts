@@ -1,9 +1,8 @@
 // The sphere interior (liquid chrome), the fixed camera, and lighting.
 
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
-import { GoopShell } from '../style/goop';
+import { ChromeConsole } from '../style/console';
+import { cockpitEnvironment } from './environment';
 import { LOW_GFX } from '../style/quality';
 import { wallToWorld } from '../panels/patch';
 import { bezelRadius, knobSlotPosition, type LayoutConfig } from './layout';
@@ -33,12 +32,10 @@ export class Cockpit {
   readonly camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.05, 500);
   /** Dark backdrop beyond the chrome, in case any edge of the dome shows. */
   private shell: THREE.Mesh;
-  private readonly goop: GoopShell | null;
+  /** The molded chrome console everything is set into. */
+  readonly console: ChromeConsole;
   private readonly key: THREE.PointLight;
   private readonly rim: THREE.PointLight;
-  /** Long strip lights whose reflections sweep across the curved dome. */
-  private readonly stripTop: THREE.RectAreaLight;
-  private readonly stripLow: THREE.RectAreaLight;
   private readonly base: Pose = { eye: new THREE.Vector3(), target: new THREE.Vector3() };
   private readonly leaned: Pose = { eye: new THREE.Vector3(), target: new THREE.Vector3() };
   /** Lean progress: 0 sitting back, 1 leaned in. */
@@ -63,23 +60,18 @@ export class Cockpit {
       new THREE.SphereGeometry(cfg.radius + 0.5, 48, 32),
       new THREE.MeshBasicMaterial({ color: '#0b1213', side: THREE.BackSide }),
     );
-    // The goop and the backdrop are the farthest opaque objects, so they draw
-    // last and the depth test skips the pixels panels already cover.
-    this.goop = LOW_GFX ? null : new GoopShell(cfg);
-    this.scene.add(this.shell);
-    if (this.goop) this.scene.add(this.goop.mesh);
+    // The console and the backdrop are the farthest opaque objects, so they
+    // draw last and the depth test skips the pixels panels already cover.
+    // Low quality bakes a coarser field onto a coarser mesh.
+    this.console = LOW_GFX ? new ChromeConsole(0.02, 0.06) : new ChromeConsole(0.008, 0.025);
+    this.scene.add(this.shell, this.console.group);
 
-    RectAreaLightUniformsLib.init();
-    this.stripTop = new THREE.RectAreaLight('#eaf8ff', 5, 14, 0.45);
-    this.stripLow = new THREE.RectAreaLight('#3ff2c4', 2.5, 11, 0.3);
-    if (!LOW_GFX) this.scene.add(this.stripTop, this.stripLow);
-
-    // Reflections come mostly from the environment map; these lights add a
-    // cool key from above and a teal rim from below for the chrome.
-    this.scene.add(new THREE.HemisphereLight('#a8d4dc', '#081012', 0.35));
-    this.key = new THREE.PointLight('#e6f6ff', 40, 0, 1.6);
+    // Reflections come almost entirely from the environment map; these add
+    // a soft warm key from above and a teal rim from below for the chrome.
+    this.scene.add(new THREE.HemisphereLight('#d8b48c', '#0a0806', 0.2));
+    this.key = new THREE.PointLight('#ffcf9e', 18, 0, 1.6);
     this.scene.add(this.key);
-    this.rim = new THREE.PointLight('#3ff2c4', 18, 0, 1.6);
+    this.rim = new THREE.PointLight('#3ff2c4', 10, 0, 1.6);
     this.scene.add(this.rim);
     this.relayout(cfg);
   }
@@ -88,28 +80,26 @@ export class Cockpit {
     this.cfg = cfg;
     this.shell.geometry.dispose();
     this.shell.geometry = new THREE.SphereGeometry(cfg.radius + 0.5, 48, 32);
-    this.goop?.relayout(cfg);
     this.base.eye.set(0, 0, cfg.radius - cfg.eyeDistance);
     this.base.target.set(0, 0, cfg.radius);
     this.camera.up.set(0, 1, 0);
     this.applyPose();
     this.key.position.set(-2.5, 3.5, cfg.radius - cfg.eyeDistance + 0.5);
     this.rim.position.set(3, -3.5, cfg.radius - cfg.eyeDistance + 2);
-    // Strips just above and below the eye, angled at the dome.
-    const eyeZ = cfg.radius - cfg.eyeDistance;
-    this.stripTop.position.set(0, 3.2, eyeZ + 0.8);
-    this.stripTop.lookAt(0, 0.6, cfg.radius);
-    this.stripLow.position.set(0, -3.4, eyeZ + 1.2);
-    this.stripLow.lookAt(0, -0.8, cfg.radius);
     this.fit(this.camera.aspect);
   }
 
-  /** Image-based lighting so chrome has something to reflect. */
+  /** Image-based lighting: the rest of the cockpit, for the chrome to reflect. */
   setEnvironment(renderer: THREE.WebGLRenderer) {
     const pmrem = new THREE.PMREMGenerator(renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.9;
+    const env = cockpitEnvironment();
+    // Unblurred and much finer than the default: the dome is a concave
+    // mirror that magnifies what it reflects about twofold, so polished chrome
+    // needs the detail to stay crisp.
+    this.scene.environment = pmrem.fromScene(env, 0, 0.1, 100, { size: LOW_GFX ? 128 : 1024 }).texture;
+    this.scene.environmentIntensity = 1;
     pmrem.dispose();
+    env.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
   }
 
   /** Chooses the field of view so the layout's fit rectangle stays in view. */
