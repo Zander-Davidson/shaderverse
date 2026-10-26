@@ -31,7 +31,10 @@ The build plan is in [the v1.0 implementation plan](implementation-plan-v1.0.md)
 
 ## v1.1: general-purpose agent
 
-A single agent turns prompts into shaders and knobs. Basic workflow:
+A single agent turns prompts into shaders and knobs, embodied by the
+companion ([Companion](companion.md)). The companion's body, eye and
+view-following behavior do not depend on the agent and can ship first,
+in a v1.0 point release. Basic workflow:
 
 1.  The user enters a shader prompt. It can ask for a new shader, a
     change to the current shader, or only a change to the current

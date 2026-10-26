@@ -20,6 +20,16 @@ Decisions made on 2026-10-25 while defining v1.0.
 | Compatibility | Shadertoy `mainImage` and standard uniforms; single pass, no texture channels | Existing single-pass shaders can be pasted in |
 | Persistence | Browser autosave plus file import and export; versioned JSON project format | No backend until v2.0 |
 
+Decisions made on 2026-10-26 about the AI companion ([Companion](companion.md)).
+
+| Topic | Decision | Reason |
+|---|---|---|
+| Companion form | A floating, throbbing glob of gel with a single eye, replacing the abstract luminous orb | An alien intelligence inside a human machine; disturbing and friendly at once, after *Cruelty Squad*'s living interface |
+| Placement | Floats free of the wall, at perches chosen per view, outside keep-out zones for every panel, the portal, knobs, tubing and overlays | It must never cover the work or block a click |
+| View behavior | Neutral: looks at the user. Side focus: follows into view and tracks the cursor. Leaned in: leans in and watches the portal, glancing at knobs | Its attention mirrors the user's |
+| State display | The throb and gaze are the AI's status display; problems make it deform and pulse faster, never frantically | State without labels |
+| Sequencing | The body ships before the v1.1 agent | It depends only on the camera, layout and pointer |
+
 ## Open questions
 
 -   Number and arrangement of knob slots around the portal.
@@ -29,3 +39,4 @@ Decisions made on 2026-10-25 while defining v1.0.
     legibility testing.
 -   Final sphere radius, eye distance and field of view, decided by eye.
 -   How API keys are handled when AI arrives in v1.1.
+-   The companion's name, color, home perch and size ([Companion](companion.md)).
