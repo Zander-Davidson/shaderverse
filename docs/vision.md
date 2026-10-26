@@ -141,6 +141,11 @@ technological culture.
     materials.
 -   **Contemporary experimental digital design:** unusual silhouettes,
     intricate surfaces, luminous details, and dense visual compositions.
+-   **Cruelty Squad:** an interface that is alive. Organic, slightly
+    repulsive matter intruding on the screen, and a floating globule
+    that shows state by how it throbs and deforms. Shaderverse uses this
+    for the AI companion ([Companion](companion.md)), made calm and
+    friendly.
 
 The result should be glossy, dark, organic, intricate, and slightly
 uncanny.
@@ -176,8 +181,12 @@ that appear over the scene when needed and disappear afterward. This
 keeps the illusion intact most of the time without requiring a custom
 text editor rendered in 3D.
 
-**The AI belongs to the machine.** The AI companion should feel like a
-subsystem of the instrument, not a chatbot pasted onto the side.
+**The AI inhabits the machine but is not of it.** The cockpit is human
+engineering: polished, machined, symmetric. The AI is an alien
+intelligence living inside it, a floating glob of gel with one eye,
+asymmetric and wet against the chrome ([Companion](companion.md)). It
+should feel like a resident of the instrument, never a chatbot pasted
+onto the side.
 
 **Maximalism is intentional.** Rich textures, decorative markings,
 luminous indicators, embedded mechanisms, and layered technical details

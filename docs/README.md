@@ -23,6 +23,7 @@ backend)
 | [Knobs and state](knobs-and-state.md) | The project store, knobs as `mainImage` parameters, reconciliation, what can become a knob, project format |
 | [Architecture](architecture.md) | Stack, module boundaries, panel system, rendering, overlays, persistence |
 | [AI](ai.md) | Agent capabilities and how agents work with the app (v1.1 and later) |
+| [Companion](companion.md) | The AI's body: a floating gel glob with one eye, its behavior in each view, and how it stays out of the way |
 | [Learning model](learning.md) | The three levels of understanding, prediction challenges, adaptive explanations |
 | [MIDI](midi.md) | Physical controller integration (not yet scheduled) |
 | [Roadmap](roadmap.md) | v1.0 through v2.0, and what is not yet scheduled |

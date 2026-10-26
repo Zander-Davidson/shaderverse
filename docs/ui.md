@@ -133,17 +133,21 @@ separate textbook.
 
 ## AI companion (v1.1 and later)
 
-The AI is represented by an abstract, luminous orb or other simple,
-nonthreatening visual presence.
+The AI has a body: a floating glob of gel with a single eye, inspired
+by the living interface of *Cruelty Squad*. It is calm, gently
+throbbing, and both disturbing and friendly. It floats near the
+console without covering anything, follows the camera between the
+neutral, side and leaned-in views, and watches the user, the cursor or
+the portal depending on the view. Its throb and gaze show whether the
+AI is listening, reasoning, synthesizing, or reporting a problem.
 
-It should feel like an intelligence inhabiting the instrument: calm,
-attentive, and capable. Its visual behavior can communicate whether it
-is listening, reasoning, synthesizing, or reporting a problem.
+The AI communicates through its body, short contextual messages and a
+focused interaction area. Avoid making a conventional chat window the
+primary interface. Prompt entry follows the overlay principle: a flat
+input appears beside the companion when the user addresses it.
 
-The AI can communicate through short contextual messages, a focused
-interaction area, and subtle animation. Avoid making a conventional chat
-window the primary interface. Prompt entry follows the overlay principle:
-a flat input appears when the user addresses the AI.
+The full spec is in [Companion](companion.md). Its body can ship before
+the AI does.
 
 ## Peripheral systems
 

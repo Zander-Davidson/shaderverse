@@ -10,6 +10,9 @@ general-purpose agent, and v1.2 splits the work across a manager of
 specialized agents ([Roadmap](roadmap.md)). The capabilities below describe the end
 state.
 
+The AI's presence in the cockpit, its body, gaze and how it shows its
+state, is specified in [Companion](companion.md).
+
 ## Shader synthesis
 
 **Input:** A natural-language description of a desired visual effect.
