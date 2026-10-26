@@ -112,20 +112,20 @@ export class PlotPanel extends CanvasPanel {
     // Name and formula, top left; a hint when nothing is plotted.
     ctx.textBaseline = 'top';
     if (fn) {
-      ctx.font = `700 40px ${MONO}`;
+      ctx.font = `700 48px ${MONO}`;
       const nameW = ctx.measureText(fn.name).width;
-      ctx.font = `500 34px ${SANS}`;
+      ctx.font = `500 41px ${SANS}`;
       const formW = ctx.measureText(fn.form).width;
       ctx.fillStyle = 'rgba(4, 7, 10, 0.82)';
-      ctx.fillRect(x0 + 10, y0 + 10, Math.max(nameW, formW) + 36, 110);
-      ctx.font = `700 40px ${MONO}`;
+      ctx.fillRect(x0 + 10, y0 + 10, Math.max(nameW, formW) + 36, 132);
+      ctx.font = `700 48px ${MONO}`;
       ctx.fillStyle = PHOSPHOR;
       ctx.fillText(fn.name, x0 + 28, y0 + 24);
-      ctx.font = `500 34px ${SANS}`;
+      ctx.font = `500 41px ${SANS}`;
       ctx.fillStyle = COLORS.text;
-      ctx.fillText(fn.form, x0 + 28, y0 + 74);
+      ctx.fillText(fn.form, x0 + 28, y0 + 86);
     } else {
-      ctx.font = `600 24px ${MONO}`;
+      ctx.font = `600 29px ${MONO}`;
       ctx.fillStyle = COLORS.dim;
       ctx.fillText('PLOT · HOVER A FUNCTION NAME IN THE SOURCE', x0 + 24, y0 + 20);
     }
