@@ -3,7 +3,7 @@
 // to uniforms only: turning a knob never recompiles.
 
 import * as THREE from 'three';
-import { gunmetalMaterial } from '../style/chassis';
+import { chromeMaterial, type RingMold } from '../style/console';
 import { physicalMaterial } from '../style/quality';
 import { knobSlotPosition, type LayoutConfig, type Rect } from '../cockpit/layout';
 import { CanvasPanel, redrawListenerRef, type PanelPointerEvent, type PointerTarget } from '../panels/panel';
@@ -32,6 +32,9 @@ export function formatValue(k: Pick<KnobRecord, 'type'>, v: number): string {
   const a = Math.abs(v);
   return a >= 100 ? v.toFixed(1) : a >= 10 ? v.toFixed(2) : v.toFixed(3);
 }
+
+/** Radius of a knob's recessed dish, as a fraction of the slot size. */
+const DISH = (192 - 14) / 384;
 
 function faceRect(cfg: LayoutConfig, slot: number): Rect {
   const p = knobSlotPosition(cfg, slot, KNOB_SLOTS);
@@ -110,24 +113,19 @@ class KnobFace extends CanvasPanel {
     const k = this.knob;
     ctx.clearRect(0, 0, W, H);
 
-    // Mounting well: a dark recessed dish with a lit metal lip.
-    const lip = ctx.createLinearGradient(0, 0, W, H);
-    lip.addColorStop(0, '#9fb6bb');
-    lip.addColorStop(0.35, '#2f4146');
-    lip.addColorStop(0.7, '#0e1517');
-    lip.addColorStop(1, '#4a6066');
-    ctx.beginPath();
-    ctx.arc(cx, cy, W / 2 - 3, 0, Math.PI * 2);
-    ctx.fillStyle = lip;
-    ctx.fill();
-    const dish = ctx.createRadialGradient(cx, cy - W * 0.08, W * 0.05, cx, cy, W / 2 - 14);
+    // Mounting well: a dark dish recessed in the console's knob collar, out
+    // to where the collar rises from its floor.
+    const rd = W * DISH;
+    const dish = ctx.createRadialGradient(cx, cy - W * 0.08, W * 0.05, cx, cy, rd);
     dish.addColorStop(0, k ? '#0f1c1c' : '#0a1111');
     dish.addColorStop(0.85, '#050a0a');
     dish.addColorStop(1, '#020404');
     ctx.beginPath();
-    ctx.arc(cx, cy, W / 2 - 14, 0, Math.PI * 2);
+    ctx.arc(cx, cy, rd, 0, Math.PI * 2);
     ctx.fillStyle = dish;
     ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, rd - 6, 0, Math.PI * 2);
     if (k && (this.hover || this.active)) {
       ctx.lineWidth = 3;
       ctx.strokeStyle = `${tint}aa`;
@@ -187,8 +185,8 @@ class KnobCap {
   private readonly body: THREE.Mesh;
 
   constructor(tint: string) {
-    // Polished chrome with a faint thin-film sheen.
-    const chrome = gunmetalMaterial();
+    // The same chrome as the console it's mounted in.
+    const chrome = chromeMaterial();
     const dark = physicalMaterial({ color: '#1b2427', metalness: 0.9, roughness: 0.38, clearcoat: 0.5 });
     // A lathed profile: wide skirt, waist, domed cap.
     const profile = [
@@ -396,6 +394,15 @@ export class KnobBank {
     for (const s of this.slots) s.relayout(cfg);
     this.tubes.relayout(cfg);
     for (const s of this.slots) this.tubes.setActive(s.slot, !!s.knob, KNOB_TINT);
+  }
+
+  /** Collars for the console to mold around each slot's dish. */
+  molds(cfg: LayoutConfig): RingMold[] {
+    const size = cfg.knobRing.size;
+    return this.slots.map((s) => {
+      const p = knobSlotPosition(cfg, s.slot, KNOB_SLOTS);
+      return { x: p.x, y: p.y, outer: size / 2 + 0.09, opening: size * DISH };
+    });
   }
 
   update(time = 0) {

@@ -18,7 +18,7 @@ import { wallToWorld } from './panels/patch';
 import { onPanelRedraw } from './panels/panel';
 import { PlotPanel } from './panels/plot';
 import { PointerRouter } from './panels/pointer';
-import { PortalBezel, PortalPanel, PortalRim } from './panels/portal';
+import { PortalPanel, PortalRim, portalMold } from './panels/portal';
 import { LibraryPanel, StatusPanel, type LibraryActions } from './panels/status';
 import {
   autosave,
@@ -69,7 +69,6 @@ export function startApp(root: HTMLElement): void {
   cockpit.fit(window.innerWidth / window.innerHeight);
   const portal = new PortalPanel(runtime, cfg);
   const rim = new PortalRim(cfg);
-  const bezel = new PortalBezel(cfg);
   // The curved panel is the editor; ?editor=overlay restores the flat window.
   const useOverlay = new URLSearchParams(location.search).get('editor') === 'overlay';
   const editor: SceneEditor | EditorOverlay = useOverlay
@@ -114,7 +113,15 @@ export function startApp(root: HTMLElement): void {
   const library = new LibraryPanel(cfg, store, libraryActions);
   const knobs = new KnobBank(cfg, store);
 
-  cockpit.scene.add(code.caret, portal.hole, bezel.group, knobs.tubes.group, rim.mesh, portal.mesh, plot.mesh, code.mesh, status.mesh, library.mesh, knobs.group);
+  cockpit.scene.add(code.caret, portal.hole, knobs.tubes.group, rim.mesh, portal.mesh, plot.mesh, code.mesh, status.mesh, library.mesh, knobs.group);
+  // Bezels, collars and tubing, molded into the console as one piece.
+  const moldConsole = () =>
+    cockpit.console.mold(renderer, cfg, {
+      panels: [plot, code, status, library].flatMap((p) => p.mold() ?? []),
+      rings: [portalMold(cfg), ...knobs.molds(cfg)],
+      pipes: knobs.tubes.molds,
+    });
+  moldConsole();
   const aniso = renderer.capabilities.getMaxAnisotropy();
   for (const p of [rim, plot, code, status, library]) p.setAnisotropy(aniso);
   knobs.setAnisotropy(aniso);
@@ -263,6 +270,9 @@ export function startApp(root: HTMLElement): void {
   canvas.addEventListener('webglcontextrestored', () => {
     contextLost = false;
     compositor.resize();
+    // Render targets were lost with the context: bake the reflections and console again.
+    cockpit.setEnvironment(renderer);
+    moldConsole();
     runtime.recompile(store.getState().project.source);
     for (const p of [rim, plot, code, status, library]) p.invalidate();
     for (const s of knobs.slots) s.face.invalidate();
@@ -302,12 +312,12 @@ export function startApp(root: HTMLElement): void {
     cockpit.fit(window.innerWidth / window.innerHeight);
     portal.rebuild(cfg);
     rim.relayout(cfg);
-    bezel.relayout(cfg);
     plot.relayout(cfg);
     code.relayout(cfg);
     status.relayout(cfg);
     library.relayout(cfg);
     knobs.relayout(cfg);
+    moldConsole();
     editor.position();
     compositor.markAll();
   };

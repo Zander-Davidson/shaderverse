@@ -4,8 +4,8 @@
 import * as THREE from 'three';
 import type { Rect } from '../cockpit/layout';
 import { spherePatchGeometry } from './patch';
-import type { PanelShape } from './shape';
-import { Chassis, screenShapeFor } from '../style/chassis';
+import { screenShapeFor, type PanelShape } from './shape';
+import type { PanelMold } from '../style/console';
 
 export type PanelPointerKind = 'down' | 'move' | 'up' | 'wheel' | 'hover' | 'leave' | 'dblclick' | 'contextmenu';
 
@@ -107,7 +107,6 @@ export abstract class CanvasPanel implements PointerTarget {
 
   setAnisotropy(n: number): void {
     this.texture.anisotropy = n;
-    this.chassis?.setAnisotropy(n);
   }
 
   invalidate(): void {
@@ -155,11 +154,12 @@ export abstract class CanvasPanel implements PointerTarget {
     return this.buttonAt(x, y) ? 'pointer' : 'default';
   }
 
-  /** The screen opening content is drawn in (the whole silhouette without a chassis). */
+  /** The screen opening content is drawn in (the whole silhouette without a bezel). */
   shape: PanelShape | null = null;
-  /** The outer silhouette, chassis included. */
+  /** The outer silhouette, bezel included. */
   outerShape: PanelShape | null = null;
-  chassis: Chassis | null = null;
+  /** Width in pixels of the bezel molded into the console around the screen; 0 for none. */
+  bezel = 0;
 
   hitTest(x: number, y: number): boolean {
     const s = this.outerShape ?? this.shape;
@@ -168,7 +168,7 @@ export abstract class CanvasPanel implements PointerTarget {
 
   /** Screen origin in panel pixels: content is drawn relative to it. */
   get ox(): number {
-    return this.chassis ? this.shape!.inset : 0;
+    return this.bezel ? this.shape!.inset : 0;
   }
 
   get oy(): number {
@@ -185,23 +185,26 @@ export abstract class CanvasPanel implements PointerTarget {
   }
 
   /**
-   * Gives the panel a raised chrome chassis around a recessed screen. Content
-   * then lays out in the screen opening, `bezel` pixels inside `outer`.
+   * Sets the screen inside a bezel: the console molds the bezel (see
+   * ChromeConsole) and content lays out in the opening, `bezel` pixels inside
+   * `outer`.
    */
-  setChassis(outer: PanelShape, bezel: number, radius: number): void {
+  setBezel(outer: PanelShape, bezel: number): void {
     this.outerShape = outer;
     this.shape = screenShapeFor(outer, bezel);
-    if (!this.chassis) {
-      this.chassis = new Chassis();
-      // Picking goes through the screen mesh, which has the same layout.
-      this.chassis.mesh.raycast = () => {};
-      this.mesh.add(this.chassis.mesh);
-      // The screen is fully covered at its edges by the chassis lip, so it
-      // can be opaque: drawn front to back, it hides what's behind it early.
+    if (!this.bezel) {
+      // The screen's edge is tucked under the console's lip, so it can be
+      // opaque: drawn front to back, it hides what's behind it early.
       this.material.transparent = false;
       this.material.alphaTest = 0.5;
       this.material.needsUpdate = true;
     }
-    this.chassis.build(this.rect, radius, this.inset, outer, bezel);
+    this.bezel = bezel;
+  }
+
+  /** The bezel to mold into the console, if this panel has one. */
+  mold(): PanelMold | null {
+    if (!this.bezel) return null;
+    return { rect: this.rect, pixelWidth: this.pixelWidth, pixelHeight: this.pixelHeight, outer: this.outerShape!, screen: this.shape! };
   }
 }

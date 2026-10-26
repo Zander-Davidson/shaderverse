@@ -141,3 +141,9 @@ export class PanelShape {
     }
   }
 }
+
+/** The screen opening inside an outer silhouette, `bezel` pixels in. */
+export function screenShapeFor(outer: PanelShape, bezel: number): PanelShape {
+  const cut: Circle | null = outer.cut ? { ...outer.cut, r: outer.cut.r + bezel } : null;
+  return new PanelShape(outer.width, outer.height, Math.max(10, outer.corner - bezel * 0.6), cut, outer.inset + bezel);
+}

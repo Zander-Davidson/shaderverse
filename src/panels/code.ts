@@ -30,7 +30,7 @@ const TEXT_X = GUTTER + 6;
 const BLINK_MS = 530;
 /** Texels per wall unit; sets how large code appears on screen. */
 const PX_PER_UNIT = 280;
-/** Chassis bezel around the screen, in pixels. */
+/** Bezel around the screen, in pixels. */
 const BEZEL = Math.round(0.2 * PX_PER_UNIT);
 
 interface Segment {
@@ -147,7 +147,7 @@ export class CodePanel extends CanvasPanel {
     const H = this.pixelHeight;
     // Clear of the portal: a plain rounded panel (the knob tubing fills the gap).
     const outer = new PanelShape(W, H, (cfg.cornerRadius / cfg.code.w) * W, null);
-    this.setChassis(outer, BEZEL, cfg.radius);
+    this.setBezel(outer, BEZEL);
   }
 
   /** Right edge of the text area on a screen row, clear of the portal cut. */

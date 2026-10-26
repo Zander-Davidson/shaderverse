@@ -168,9 +168,9 @@ src/
   shader/     wrapper, compile validator, error parser, runtime
   source/     tokenizer, mainImage locator, literal checks, rewrites, reconciliation
   project/    store, actions and log, schema, persistence
-  cockpit/    sphere, camera, layout config, frame compositor
+  cockpit/    sphere, camera, layout config, frame compositor, the pod it reflects
   editor/     editing engine shared by the in-scene and overlay editors
-  style/      chrome chassis, LCD screens, liquid-chrome backdrop, quality
+  style/      molded chrome console (bezels, collars, tubing), LCD screens, quality
   panels/     panel system, pointer picking, portal, code display, status, library
   knobs/      knob objects and interaction
   overlays/   editor, knob popover, boot sequence, help
