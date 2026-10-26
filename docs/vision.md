@@ -145,6 +145,11 @@ technological culture.
 The result should be glossy, dark, organic, intricate, and slightly
 uncanny.
 
+Specific reference interfaces (the Fallout Pip-Boy, the Black Ops main
+menu, the Nebuchadnezzar control room in The Matrix, and the EVA pod in
+2001: A Space Odyssey) are described in [UI](ui.md#reference-interfaces),
+with the features each one suggests.
+
 ### Design principles
 
 **The portal is the focal point.** The generated shader is the primary

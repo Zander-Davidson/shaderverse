@@ -19,7 +19,7 @@ backend)
 | Document | What it covers |
 |---|---|
 | [Vision and identity](vision.md) | Product vision, naming and fiction, design philosophy, success criteria, north star |
-| [UI](ui.md) | The spherical cockpit: geometry, fixed view, portal, code display and editor overlay, knobs, readouts |
+| [UI](ui.md) | The spherical cockpit: geometry, fixed view, portal, code display and editor overlay, knobs, readouts, reference interfaces |
 | [Knobs and state](knobs-and-state.md) | The project store, knobs as `mainImage` parameters, reconciliation, what can become a knob, project format |
 | [Architecture](architecture.md) | Stack, module boundaries, panel system, rendering, overlays, persistence |
 | [AI](ai.md) | Agent capabilities and how agents work with the app (v1.1 and later) |
