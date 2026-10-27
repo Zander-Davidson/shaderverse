@@ -2,12 +2,20 @@ import { expect, type Page } from '@playwright/test';
 
 /** Loads the app with a fresh project and waits for the first compile. */
 export async function openApp(page: Page) {
-  // Low graphics: the tests render on a software GPU.
-  await page.goto('/?noboot&gfx=low');
+  // Low graphics, and camera moves that cut rather than ease: in CI the
+  // tests render on a software GPU.
+  await page.goto('/?noboot&gfx=low&camera=instant');
   await page.waitForFunction(() => {
     const sv = (window as any).__sv;
     return sv && sv.store.getState().compile.status === 'ok' && sv.runtime.frame > 2;
   });
+}
+
+/** Waits for `n` animation frames (the shader's own counter stops while paused). */
+export async function waitFrames(page: Page, n = 3) {
+  await page.evaluate(async (n) => {
+    for (let i = 0; i < n; i++) await new Promise(requestAnimationFrame);
+  }, n);
 }
 
 /** Loads a source into the store and waits for it to compile (or fail). */

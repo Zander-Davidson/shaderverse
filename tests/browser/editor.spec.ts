@@ -1,5 +1,5 @@
 import { test, type Page } from '@playwright/test';
-import { expect, MOD, openApp, pause, sampleTarget, setSource, state } from './helpers';
+import { expect, MOD, openApp, pause, sampleTarget, setSource, state, waitFrames } from './helpers';
 
 const SRC = `void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
@@ -9,14 +9,21 @@ const SRC = `void mainImage(out vec4 fragColor, in vec2 fragCoord)
 
 /** Screen point of the character at `needle` (plus `offset`) on the curved code panel. */
 async function codePoint(page: Page, needle: string, offset = 0) {
-  return page.evaluate(
-    ({ needle, offset }) => {
-      const sv = (window as any).__sv;
-      const i = sv.store.getState().project.source.indexOf(needle);
-      return sv.codePoint(i + offset);
-    },
-    { needle, offset },
-  );
+  const at = () =>
+    page.evaluate(
+      ({ needle, offset }) => {
+        const sv = (window as any).__sv;
+        const i = sv.store.getState().project.source.indexOf(needle);
+        return sv.codePoint(i + offset);
+      },
+      { needle, offset },
+    );
+  // Hovering the code turns the camera toward it (instantly in tests), which
+  // moves the text on screen: point at it, let the turn finish, measure again.
+  const p = await at();
+  await page.mouse.move(p.x, p.y);
+  await waitFrames(page);
+  return at();
 }
 
 const selection = (page: Page) =>
@@ -65,10 +72,12 @@ test.describe('in-scene editor', () => {
     const before = await sampleTarget(page);
     const a = await codePoint(page, '0.2;', 0);
     const b = await codePoint(page, '0.2;', 3);
-    // Drag from the start of "0.2" to the start of ";".
-    await page.mouse.move(a.x - 6, a.y);
+    // Drag from the start of "0.2" to the start of ";": a little left of
+    // each character's left edge (codePoint gives its center).
+    const half = ((b.x - a.x) / 3) * 0.6;
+    await page.mouse.move(a.x - half, a.y);
     await page.mouse.down();
-    await page.mouse.move(b.x - 6, b.y, { steps: 5 });
+    await page.mouse.move(b.x - half, b.y, { steps: 5 });
     await page.mouse.up();
     await expect.poll(async () => (await selection(page)).text).toBe('0.2');
 

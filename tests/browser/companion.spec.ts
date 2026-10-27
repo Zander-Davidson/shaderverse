@@ -65,12 +65,17 @@ test('knobs and the portal still take their own clicks', async ({ page }) => {
 });
 
 test('clicking it squishes it and changes nothing else', async ({ page }) => {
+  // Picked once it has drifted into place at its perch.
+  const picked = () =>
+    page.evaluate(async () => {
+      const sv = (window as any).__sv;
+      const v = sv.companion.body.mesh.position.clone().project(sv.cockpit.camera);
+      const r = sv.canvas.getBoundingClientRect();
+      const p = { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+      return sv.router.pickClient(p.x, p.y)?.target === sv.companion;
+    });
+  await expect.poll(picked).toBe(true);
   const p = await companionPoint(page);
-  const picked = await page.evaluate(({ x, y }) => {
-    const sv = (window as any).__sv;
-    return sv.router.pickClient(x, y)?.target === sv.companion;
-  }, p);
-  expect(picked).toBe(true);
   const before = await state(page);
   await page.mouse.click(p.x, p.y);
   await expect.poll(() => page.evaluate(() => Math.abs((window as any).__sv.companion.squish))).toBeGreaterThan(0.01);

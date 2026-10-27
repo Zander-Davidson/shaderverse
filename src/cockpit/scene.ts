@@ -13,6 +13,12 @@ export const LEAN_IN_S = 0.85;
 export const LEAN_OUT_S = 0.7;
 /** Seconds to turn toward a side's panels, or back. */
 export const FOCUS_S = 0.4;
+/**
+ * `?camera=instant` cuts straight to each view instead of easing there, for
+ * the browser tests, which render slowly on a software GPU.
+ */
+const INSTANT = typeof location !== 'undefined' && new URLSearchParams(location.search).get('camera') === 'instant';
+
 /** Field of view narrows by this fraction when turned to a side. */
 const FOCUS_ZOOM = 0.08;
 
@@ -232,6 +238,7 @@ export class Cockpit {
   /** Advances the lean animation; returns true while the camera is moving. */
   update(dt: number): boolean {
     let moved = false;
+    if (INSTANT) dt = Infinity;
     if (this.lean !== this.leanGoal) {
       const step = dt / (this.leanGoal > this.lean ? LEAN_IN_S : LEAN_OUT_S);
       this.lean = this.leanGoal > this.lean ? Math.min(1, this.lean + step) : Math.max(0, this.lean - step);
