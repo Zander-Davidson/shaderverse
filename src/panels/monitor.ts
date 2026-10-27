@@ -152,6 +152,11 @@ export abstract class MonitorPanel extends CanvasPanel {
     this.mesh.geometry = this.geometryFor();
     this.buildBody();
     this.buildGlass();
+    this.place(cfg, m);
+  }
+
+  /** Poses the monitor for a layout without rebuilding it; the size must not change. */
+  place(cfg: LayoutConfig, m: HungLayout): void {
     const f = monitorFrame(cfg, m);
     this.scale = f.scale;
     this.rig.position.copy(f.position);

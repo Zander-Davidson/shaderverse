@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import type { LayoutConfig } from '../cockpit/layout';
+import { consolePose } from '../cockpit/rig';
 import { MonitorPanel } from '../panels/monitor';
 import { redrawListenerRef, type PanelPointerEvent, type PointerTarget } from '../panels/panel';
 import { PanelShape } from '../panels/shape';
@@ -195,6 +196,11 @@ export class ConsolePanel extends MonitorPanel {
     this.reshape(cfg);
     this.hang(cfg, cfg.console);
     this.invalidate();
+  }
+
+  /** Poses the console `rise` of the way up toward its leaned-in pose. */
+  setRise(cfg: LayoutConfig, rise: number) {
+    this.place(cfg, consolePose(cfg, rise));
   }
 
   private reshape(cfg: LayoutConfig) {

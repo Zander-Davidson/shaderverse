@@ -339,6 +339,9 @@ export function startApp(root: HTMLElement): void {
       compositor.markAll();
       editor.position();
     }
+    // The console rises and falls with the lean.
+    controls.setRise(cfg, cockpit.consoleRise);
+    arms.setRise(cfg, cockpit.consoleRise);
     runtime.setViewZoom(cockpit.viewZoom);
     runtime.render(dt);
     // A new glow color relights the whole cached cockpit.

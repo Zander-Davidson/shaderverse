@@ -23,6 +23,11 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
     if (r.size !== undefined) f.add(r, 'size', 1, 12, 0.05).onChange(onChange);
   };
   rect('portal', cfg.portal);
+  const lean = gui.addFolder('lean');
+  lean.close();
+  lean.add(cfg.lean, 'reach', 0, 1, 0.01).onChange(onChange);
+  lean.add(cfg.lean, 'lift', -10, 15, 0.1).onChange(onChange);
+  lean.add(cfg.lean, 'drop', 0, 1.5, 0.05).onChange(onChange);
   gui.add(cfg, 'monitorFacing', 0, 1, 0.01).name('monitor facing').onChange(onChange);
 
   const monitor = (name: string, m: MonitorLayout) => {
@@ -55,6 +60,8 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
   con.add(cfg.console.at, '2', 1, 8, 0.01).name('z').onChange(onChange);
   con.add(cfg.console, 'scale', 0.1, 1.2, 0.005).onChange(onChange);
   for (const k of ['yaw', 'pitch', 'roll'] as const) con.add(cfg.console, k, -80, 45, 0.5).onChange(onChange);
+  (['x', 'y', 'z'] as const).forEach((n, i) => con.add(cfg.console.lean.at, i as 0 | 1 | 2, -5, 8, 0.01).name(`leaned ${n}`).onChange(onChange));
+  con.add(cfg.console.lean, 'pitch', -80, 45, 0.5).name('leaned pitch').onChange(onChange);
   cfg.console.arms.forEach((a, n) => {
     con.add(a, 'mount', -6, 6, 0.01).name(`arm ${n + 1} mount`).onChange(onChange);
     (['x', 'y', 'z'] as const).forEach((c, i) => con.add(a.elbow, i as 0 | 1 | 2, -8, 12, 0.01).name(`arm ${n + 1} elbow ${c}`).onChange(onChange));

@@ -3,7 +3,7 @@
 // eye: x right, y up, z forward. Pure math, so it can be unit tested.
 
 import * as THREE from 'three';
-import type { HungLayout, LayoutConfig } from './layout';
+import type { ConsoleLayout, HungLayout, LayoutConfig } from './layout';
 
 /** World position of rig point (x, y, z). The camera looks down world +z with its right on world -x. */
 export function rigToWorld(cfg: LayoutConfig, x: number, y: number, z: number, out = new THREE.Vector3()) {
@@ -51,6 +51,17 @@ export function monitorFrame(cfg: LayoutConfig, m: HungLayout): Frame {
   euler.set(m.pitch * DEG, m.yaw * DEG, m.roll * DEG, 'YXZ');
   quaternion.multiply(tilt.setFromEuler(euler));
   return { position, quaternion, scale: m.scale };
+}
+
+/**
+ * The console's pose partway through the lean (`rise` 0 sitting back, 1
+ * leaned in): it rises and comes forward to follow the viewer.
+ */
+export function consolePose(cfg: LayoutConfig, rise: number): ConsoleLayout {
+  const c = cfg.console;
+  if (rise <= 0) return c;
+  const at = c.at.map((v, i) => v + (c.lean.at[i]! - v) * rise) as [number, number, number];
+  return { ...c, at, pitch: c.pitch + (c.lean.pitch - c.pitch) * rise };
 }
 
 /** World corners of a monitor's outline (screen plus bezel), clockwise from top left. */

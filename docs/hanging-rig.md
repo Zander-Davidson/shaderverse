@@ -32,7 +32,8 @@ in [screenshots/hanging-rig](screenshots/hanging-rig/README.md).
     heavy frame and sill, four struts leaning toward an apex above the
     view so the panes taper as they rise, a cross strut over the outer
     panes only, and one diagonal brace on the right. The center pane is
-    the widest and nothing crosses the middle of the view. A faint haze,
+    the widest, its struts set well out past the focal circle, so nothing
+    crosses the middle of the view, sitting back or leaned in. A faint haze,
     edge shading and dust make the glass read. `cfg.portal` is now the
     focal circle of that view: what leaning in frames and what the
     companion and the overlay editor keep clear of. The window parallax
@@ -54,8 +55,11 @@ in [screenshots/hanging-rig](screenshots/hanging-rig/README.md).
     CMP and RUN lamps follow state, the toggles and keys are decorative.
     Hovering a knob lights its parameter in the code and the other way
     round.
--   **Lean-in.** Forward and down, as far as keeps the focal circle above
-    and the knob row with its labels along the bottom.
+-   **Lean-in.** A straight glide forward, most of the way toward the
+    closest pose that keeps the focal circle above and the knob row with
+    its labels along the bottom. The console rises and comes forward to
+    follow, its arms with it, in step with the camera, so it sits at a
+    comfortable size instead of looming (`cfg.lean`, `cfg.console.lean`).
 
 Open: the window's proportions and strut layout, tuned by eye in
 `src/cockpit/layout.ts`; whether the console's decorative controls get
@@ -245,9 +249,9 @@ depth.
 -   **Leaned in.** Today the lean-in frames the portal and the knob
     ring. With the console near the camera, a straight lean toward the
     portal would push the console out of the bottom of the frame or
-    through the camera. The lean-in instead moves the head forward and
-    down, framing the portal with the console's knob row along the
-    bottom edge. Its exact pose is an open question, settled by eye.
+    through the camera. The lean-in instead glides the head straight
+    forward while the console rises to follow, framing the portal with
+    the console's knob row along the bottom edge.
 
 ## The companion
 
@@ -307,7 +311,6 @@ monitors, rather than in a thin gap in front of a wall.
     panel hangs on.
 -   How much bulge the glass can take before the code display becomes
     harder to read.
--   The lean-in pose, now that the console is near the camera.
 -   Whether the console's buttons and keys get real actions in the same
     release or later.
 -   One arm or two for the console.
