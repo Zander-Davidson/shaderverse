@@ -2,11 +2,12 @@
 // overhead rail just above the default view, hung from the shell on two
 // struts, and one arm per monitor. Each arm runs from a carriage on the rail
 // down to a pivoting elbow, then to a tilt yoke on the monitor's back, with
-// its cable alongside. The arms are posed once in the layout and never move.
+// its cable alongside. The monitors' arms are posed once in the layout and
+// never move; the console's two follow it up as the viewer leans in.
 
 import * as THREE from 'three';
 import type { ArmLayout, HungLayout, LayoutConfig, MonitorLayout } from './layout';
-import { monitorFrame, rigToWorld } from './rig';
+import { consolePose, monitorFrame, rigToWorld } from './rig';
 import { chromeMaterial } from '../style/console';
 import { physicalMaterial } from '../style/quality';
 
@@ -43,12 +44,15 @@ export function armPoints(cfg: LayoutConfig, m: MonitorLayout) {
   return armPointsFor(cfg, m, m.arm, [0, m.h * 0.12]);
 }
 
+/** The console's two arms, with the console `rise` of the way up (see consolePose). */
+export function consoleArmPoints(cfg: LayoutConfig, rise = 0) {
+  const pose = consolePose(cfg, rise);
+  return cfg.console.arms.map((a) => armPointsFor(cfg, pose, a, a.attach));
+}
+
 /** Every arm on the rig: the monitors' and the console's two. */
-export function allArmPoints(cfg: LayoutConfig) {
-  return [
-    ...[cfg.plot, cfg.code, cfg.status, cfg.library].map((m) => armPoints(cfg, m)),
-    ...cfg.console.arms.map((a) => armPointsFor(cfg, cfg.console, a, a.attach)),
-  ];
+export function allArmPoints(cfg: LayoutConfig, rise = 0) {
+  return [...[cfg.plot, cfg.code, cfg.status, cfg.library].map((m) => armPoints(cfg, m)), ...consoleArmPoints(cfg, rise)];
 }
 
 const Y = new THREE.Vector3(0, 1, 0);
@@ -75,6 +79,9 @@ export class Arms {
   private readonly metal = physicalMaterial({ color: '#5b6167', metalness: 0.9, roughness: 0.3, clearcoat: 0.2, clearcoatRoughness: 0.25 });
   private readonly chrome = chromeMaterial({ roughness: 0.1 });
   private readonly rubber = physicalMaterial({ color: '#0d0f10', metalness: 0, roughness: 0.65 });
+  /** The console's arms, rebuilt as it rises. */
+  private readonly consoleArms = new THREE.Group();
+  private rise = 0;
 
   constructor(cfg: LayoutConfig) {
     this.build(cfg);
@@ -83,16 +90,34 @@ export class Arms {
   relayout(cfg: LayoutConfig): void {
     for (const o of [...this.group.children]) {
       this.group.remove(o);
-      o.traverse((c) => (c as THREE.Mesh).geometry?.dispose());
+      if (o !== this.consoleArms) o.traverse((c) => (c as THREE.Mesh).geometry?.dispose());
     }
     this.build(cfg);
   }
 
+  /** Re-poses the console's arms for the console `rise` of the way up. */
+  setRise(cfg: LayoutConfig, rise: number): void {
+    if (rise === this.rise) return;
+    this.rise = rise;
+    this.buildConsoleArms(cfg);
+  }
+
   private build(cfg: LayoutConfig): void {
     this.rail(cfg);
-    for (const a of allArmPoints(cfg)) this.arm(cfg, a);
-    // Static, and never picked: pointer rays pass through to what's behind.
+    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library]) this.arm(cfg, armPoints(cfg, m), this.group);
+    this.group.add(this.consoleArms);
+    this.buildConsoleArms(cfg);
+    // Never picked: pointer rays pass through to what's behind.
     this.group.traverse((o) => (o.raycast = () => {}));
+  }
+
+  private buildConsoleArms(cfg: LayoutConfig): void {
+    for (const o of [...this.consoleArms.children]) {
+      this.consoleArms.remove(o);
+      o.traverse((c) => (c as THREE.Mesh).geometry?.dispose());
+    }
+    for (const a of consoleArmPoints(cfg, this.rise)) this.arm(cfg, a, this.consoleArms);
+    this.consoleArms.traverse((o) => (o.raycast = () => {}));
   }
 
   private rail(cfg: LayoutConfig): void {
@@ -116,7 +141,7 @@ export class Arms {
     }
   }
 
-  private arm(cfg: LayoutConfig, points: ReturnType<typeof armPointsFor>): void {
+  private arm(cfg: LayoutConfig, points: ReturnType<typeof armPointsFor>, parent: THREE.Group): void {
     const { mount, elbow, wrist, plate, frame } = points;
     const k = frame.scale;
     const g = new THREE.Group();
@@ -181,6 +206,6 @@ export class Arms {
       plate.clone().addScaledVector(side, 0.12).addScaledVector(back, 0.03),
     ]);
     g.add(new THREE.Mesh(new THREE.TubeGeometry(cable, 64, 0.018, 8, false), this.rubber));
-    this.group.add(g);
+    parent.add(g);
   }
 }

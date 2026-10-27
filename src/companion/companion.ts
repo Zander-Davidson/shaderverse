@@ -9,7 +9,7 @@ import type { CameraView, Cockpit } from '../cockpit/scene';
 import type { KnobBank } from '../knobs/knobs';
 import type { PanelPointerEvent, PointerTarget } from '../panels/panel';
 import { wallToWorld } from '../panels/patch';
-import { monitorCorners } from '../cockpit/rig';
+import { consolePose, monitorCorners } from '../cockpit/rig';
 import { allArmPoints } from '../cockpit/arms';
 import type { ProjectStore } from '../project/store';
 import type { ShaderRuntime } from '../shader/runtime';
@@ -318,7 +318,7 @@ export class Companion implements PointerTarget {
         return this.screen(wallToWorld(x, y, cfg.radius, 0, this.w), camera);
       }
       case 'knob': {
-        return this.screen(knobWorld(cfg, focus.slot, this.w), camera);
+        return this.screen(knobWorld(cfg, focus.slot, this.w, this.deps.cockpit.consoleRise), camera);
       }
     }
   }
@@ -378,6 +378,8 @@ export class Companion implements PointerTarget {
   keepOut(cam: THREE.Camera, cameraView: CameraView = 'neutral'): KeepOut {
     const { cfg, canvas } = this.deps;
     const R = cfg.radius;
+    // Leaned in, the console has risen to follow.
+    const rise = cameraView === 'lean' ? 1 : 0;
     const p = new THREE.Vector3();
     const at = (x: number, y: number) => this.screen(wallToWorld(x, y, R, 0, p), cam);
     const circle = (x: number, y: number, r: number): Circle => {
@@ -392,7 +394,7 @@ export class Companion implements PointerTarget {
     const view = new THREE.Vector3();
     const boxes: Box[] = [];
     // The monitors and the console.
-    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library, cfg.console]) {
+    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library, consolePose(cfg, rise)]) {
       // Leaned in, the monitors pass behind the camera, where they project
       // inside out; those keep nothing out.
       const corners = monitorCorners(cfg, m);
@@ -412,7 +414,7 @@ export class Companion implements PointerTarget {
     const rim = cameraView === 'left' || cameraView === 'right' ? SIDE_RIM : 1;
     const circles: Circle[] = [circle(cfg.portal.x, cfg.portal.y, (cfg.portal.size / 2) * rim)];
     // The arms, as a chain of circles down each one, where they're in front of the camera.
-    for (const a of allArmPoints(cfg)) {
+    for (const a of allArmPoints(cfg, rise)) {
       const shoulder = a.mount.clone().add(new THREE.Vector3(0, -0.3, 0));
       for (const [from, to] of [[shoulder, a.elbow], [a.elbow, a.wrist]] as const) {
         const n = Math.max(1, Math.ceil(from.distanceTo(to) / 0.2));

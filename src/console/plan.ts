@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import type { LayoutConfig } from '../cockpit/layout';
-import { monitorFrame } from '../cockpit/rig';
+import { consolePose, monitorFrame } from '../cockpit/rig';
 import { KNOB_SLOTS } from '../project/schema';
 
 /** Distance between knob centers, and the size of each knob's face (dish and ring). */
@@ -75,15 +75,15 @@ export function consoleControls(): Control[] {
 }
 
 /** World position of a point on the console's face: panel units, `lift` off the face. */
-export function consolePoint(cfg: LayoutConfig, x: number, y: number, lift = 0, out = new THREE.Vector3()): THREE.Vector3 {
-  const f = monitorFrame(cfg, cfg.console);
+export function consolePoint(cfg: LayoutConfig, x: number, y: number, lift = 0, out = new THREE.Vector3(), rise = 0): THREE.Vector3 {
+  const f = monitorFrame(cfg, consolePose(cfg, rise));
   return out.set(x, y, lift).multiplyScalar(f.scale).applyQuaternion(f.quaternion).add(f.position);
 }
 
 /** World position of knob slot `i`'s cap. */
-export function knobWorld(cfg: LayoutConfig, i: number, out = new THREE.Vector3()): THREE.Vector3 {
+export function knobWorld(cfg: LayoutConfig, i: number, out = new THREE.Vector3(), rise = 0): THREE.Vector3 {
   const [x, y] = knobLocal(i);
-  return consolePoint(cfg, x, y, KNOB_LIFT, out);
+  return consolePoint(cfg, x, y, KNOB_LIFT, out, rise);
 }
 
 /** World radius of a knob's face. */

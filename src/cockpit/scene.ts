@@ -207,7 +207,8 @@ export class Cockpit {
     for (const i of [0, KNOB_SLOTS - 1]) {
       const [x, y] = knobLocal(i);
       for (const [dx, dy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]] as const) {
-        knobs.push(consolePoint(cfg, x + (dx * KNOB_FACE) / 2, y + (dy > 0 ? KNOB_FACE / 2 : -KNOB_FACE / 2 - KNOB_STRIP), 0.15));
+        // Where the knobs will be once the console has risen to follow.
+        knobs.push(consolePoint(cfg, x + (dx * KNOB_FACE) / 2, y + (dy > 0 ? KNOB_FACE / 2 : -KNOB_FACE / 2 - KNOB_STRIP), 0.15, undefined, 1));
       }
     }
     frame.push(...knobs);
@@ -221,10 +222,15 @@ export class Cockpit {
     const bottom = low.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(low.length);
     const cam = new THREE.PerspectiveCamera();
     const v = new THREE.Vector3();
+    const lift = (cfg.lean.lift * Math.PI) / 180;
     const aimFrom = (eye: THREE.Vector3, out: THREE.Vector3) => {
       const up = top.clone().sub(eye).normalize();
       const down = bottom.clone().sub(eye).normalize();
-      return out.copy(eye).add(up.add(down).normalize());
+      const dir = up.add(down).normalize();
+      const pitch = Math.asin(dir.y) + lift;
+      const flat = Math.hypot(dir.x, dir.z);
+      dir.set((dir.x / flat) * Math.cos(pitch), Math.sin(pitch), (dir.z / flat) * Math.cos(pitch));
+      return out.copy(eye).add(dir);
     };
     const fits = (eye: THREE.Vector3) => {
       cam.position.copy(eye);
@@ -241,7 +247,7 @@ export class Cockpit {
     let best = this.base.eye.clone();
     let bestDist = best.distanceTo(this.portalCenter);
     const eye = new THREE.Vector3();
-    for (let drop = 0; drop <= 0.8; drop += 0.1) {
+    for (let drop = 0; drop <= cfg.lean.drop + 1e-6; drop += 0.1) {
       const step = new THREE.Vector3(0, -drop, 1);
       let lo = 0;
       let hi = cfg.eyeDistance;
@@ -257,6 +263,7 @@ export class Cockpit {
         bestDist = d;
       }
     }
+    best.lerpVectors(this.base.eye, best, cfg.lean.reach);
     this.leaned.eye.copy(best);
     aimFrom(best, this.leaned.target);
     // Look as far off as the wall, so turning and leaning blend smoothly.
@@ -374,6 +381,11 @@ export class Cockpit {
     this.poseInto(out, view === 'lean' ? 1 : 0, view === 'left' ? 1 : 0, view === 'right' ? 1 : 0);
     out.updateProjectionMatrix();
     return out;
+  }
+
+  /** How far the console has risen to follow the lean: 0 at rest, 1 leaned in, eased like the camera. */
+  get consoleRise(): number {
+    return easeInOutCubic(this.lean);
   }
 
   /** Advances the lean animation; returns true while the camera is moving. */

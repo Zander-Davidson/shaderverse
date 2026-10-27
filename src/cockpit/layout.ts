@@ -42,6 +42,8 @@ export interface MonitorLayout extends HungLayout {
  */
 export interface ConsoleLayout extends HungLayout {
   arms: (ArmLayout & { attach: [number, number] })[];
+  /** Leaned in, it rises to meet the viewer: its hang point and pitch then. */
+  lean: { at: [number, number, number]; pitch: number };
 }
 
 export interface LayoutConfig {
@@ -74,6 +76,14 @@ export interface LayoutConfig {
     /** Height of the cross strut over the outer panes. */
     transom: number;
   };
+  /**
+   * Leaning in: `reach` is how far of the way the head comes toward the
+   * closest pose that still fits the bezel and knob row (1 = all the way);
+   * `lift` tips the gaze up by that many degrees, so the console sinks
+   * toward the bottom edge and more of the view shows above; `drop` is the
+   * steepest descent tried per unit forward (0 glides straight ahead).
+   */
+  lean: { reach: number; lift: number; drop: number };
   /**
    * How square the monitors hang to the view: 0 faces each one at the eye
    * (the wide lens then stretches them like walls running toward the portal),
@@ -124,9 +134,12 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
     sillX: [-12.6, 13.0],
     headX: [-9.6, 10.2],
     apex: [-1.4, 25],
-    struts: [-8.4, -3.5, 3.2, 8.7],
+    struts: [-9.6, -5.8, 5.6, 9.9],
     transom: 3.1,
   },
+  // Leaning in glides straight ahead, most of the way, while the console
+  // rises to follow.
+  lean: { reach: 0.85, lift: 0, drop: 0 },
   monitorFacing: 0.55,
   rail: { y: 3.9, z: 5.6, halfWidth: 5.6, bow: 1.0 },
   cornerRadius: 0.38,
@@ -159,6 +172,7 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
       { mount: -3.2, elbow: [-2.8, -1.1, 5.3], attach: [-2.6, 0.7] },
       { mount: 3.35, elbow: [2.9, -1.35, 5.25], attach: [2.7, 0.6] },
     ],
+    lean: { at: [0.07, -1.2, 4.0], pitch: -32 },
   },
   companion: {
     size: 1.1,
