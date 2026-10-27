@@ -52,7 +52,9 @@ test('portal input becomes iMouse in shader pixels', async ({ page }) => {
   });
   await page.mouse.move(portal.x, portal.y);
   await page.mouse.down();
-  await page.mouse.move(portal.x + 20, portal.y - 20);
+  // A short drag up and right: 1% of the window each way.
+  const d = page.viewportSize()!.width / 100;
+  await page.mouse.move(portal.x + d, portal.y - d);
   const m = await page.evaluate(() => {
     const u = (window as any).__sv.runtime.material.uniforms.iMouse.value;
     return { x: u.x, y: u.y, z: u.z, size: (window as any).__sv.runtime.size };
