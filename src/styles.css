@@ -249,3 +249,31 @@ kbd {
 }
 .sv-scene-input .cm-editor { height: 100%; font: 16.8px var(--mono); }
 .sv-scene-input .cm-editor.cm-focused { outline: none; }
+
+/* Calls the companion back while it's hidden: a small closed eye in the corner. */
+.sv-companion-call {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 30;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #4a3a8a;
+  border-radius: 50% 50% 46% 54%;
+  background: radial-gradient(circle at 40% 35%, #8ff4ff, #7a3fe0 60%, #24105a);
+  opacity: 0.55;
+  cursor: pointer;
+}
+.sv-companion-call::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: #120830;
+}
+.sv-companion-call:hover, .sv-companion-call:focus-visible { opacity: 1; }
+.sv-companion-call[hidden] { display: none; }

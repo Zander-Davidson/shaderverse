@@ -235,15 +235,45 @@ suit everyone.
 -   The state table, click-to-prompt and messages arrive with the v1.1
     agent ([Roadmap](roadmap.md)).
 
+## Implementation (pre-v1.1 body)
+
+The body, eye, gaze, perches, keep-out and comfort settings are built;
+the state table, click-to-prompt and messages wait for the v1.1 agent.
+
+-   **Code:** `src/companion/`. `behavior.ts` (blinks, gaze spring and
+    saccades, pupil, glimmer, the metaball lobes, what it attends to) and
+    `perch.ts` (keep-out and perch choice, in screen pixels) are plain
+    TypeScript with unit tests (`tests/unit/companion.test.ts`).
+    `body.ts` is the shader; `companion.ts` ties them to the camera,
+    layout, pointer and store.
+-   **Layout:** `companion` in `src/cockpit/layout.ts`, tunable in the dev
+    panel: `size` (its width in wall units straight ahead sitting back;
+    it scales with distance so it looks the same size in every view),
+    `standoff` (the fraction of the way from the wall to the eye it
+    floats), `margin`, and ordered `perches` for each view.
+-   **Perch choice** uses the camera pose the view will settle at
+    (`Cockpit.settledCamera`), so it picks its spot as the camera starts
+    to move and arrives a beat after.
+-   **Low graphics** draws the metaballs as a flat field shaded from its
+    gradient instead of a displaced mesh: cheaper still, and the same
+    silhouette and eye.
+-   **Reduced motion:** `prefers-reduced-motion`, overridden with
+    `?motion=reduce` or `?motion=full`.
+-   **Hide:** <kbd>C</kbd> sinks it out of view; a small closed-eye button
+    in the bottom right brings it back. Remembered in local storage.
+-   **Leaned in** there is very little free wall: the perches are the
+    nooks beside the bezel's top right, beyond the top of the knob arc,
+    and beside the bezel's bottom right.
+
 ## Open questions
 
 -   **Name.** "Ocellus" is a placeholder.
--   **Color.** Candidates: a pale, pearly flesh with faint red veins
+-   **Color.** *Built as the bioluminescent cyan-violet (the pale flesh read as too anatomical).* Candidates: a pale, pearly flesh with faint red veins
     (most unsettling against chrome); a bile or acid green echoing the
     Gel Console (most cohesive); or a bioluminescent cyan-violet. The
     recommendation is the pale flesh, with the eye as the brightest
     part.
--   **Home perch.** Candidates in the current layout: overhead, above
+-   **Home perch.** *Built as overhead.* Candidates in the current layout: overhead, above
     the portal's bezel between the knob arc and the right-hand panels;
     or low in the crook between the code panel and the bottom of the
     knob arc. To be chosen by eye.

@@ -19,6 +19,9 @@ const FOCUS_ZOOM = 0.08;
 /** Which side's panels the head turns toward: the source side or the readouts. */
 export type FocusSide = 'left' | 'right' | null;
 
+/** Where the camera is headed: sitting back, turned to a side, or leaned in. */
+export type CameraView = 'neutral' | 'left' | 'right' | 'lean';
+
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 /** A camera pose: where the eye is and what it looks at. */
@@ -208,6 +211,24 @@ export class Cockpit {
     return this.lean !== this.leanGoal;
   }
 
+  /** The view the camera is in or moving to. */
+  get view(): CameraView {
+    if (this.leanGoal) return 'lean';
+    if (this.sides.left.goal) return 'left';
+    if (this.sides.right.goal) return 'right';
+    return 'neutral';
+  }
+
+  /** Poses `out` as the camera will be once settled in `view`. */
+  settledCamera(view: CameraView, out: THREE.PerspectiveCamera): THREE.PerspectiveCamera {
+    out.aspect = this.camera.aspect;
+    out.near = this.camera.near;
+    out.far = this.camera.far;
+    this.poseInto(out, view === 'lean' ? 1 : 0, view === 'left' ? 1 : 0, view === 'right' ? 1 : 0);
+    out.updateProjectionMatrix();
+    return out;
+  }
+
   /** Advances the lean animation; returns true while the camera is moving. */
   update(dt: number): boolean {
     let moved = false;
@@ -229,8 +250,13 @@ export class Cockpit {
   }
 
   private applyPose() {
-    const p = easeInOutCubic(this.lean);
-    const eye = this.camera.position.lerpVectors(this.base.eye, this.leaned.eye, p);
+    this.poseInto(this.camera, this.lean, this.sides.left.at, this.sides.right.at);
+  }
+
+  /** Poses a camera for a lean and side-turn progress (each 0 to 1). */
+  private poseInto(camera: THREE.PerspectiveCamera, lean: number, left: number, right: number) {
+    const p = easeInOutCubic(lean);
+    const eye = camera.position.lerpVectors(this.base.eye, this.leaned.eye, p);
     const target = new THREE.Vector3().lerpVectors(this.base.target, this.leaned.target, p);
     // A body leaning in dips slightly mid-motion and settles; the gaze leads
     // the head a little, tipping down then back up.
@@ -242,21 +268,22 @@ export class Cockpit {
     // Turning to a side: the same small dip mid-motion, and the head tips
     // toward that side, most mid-turn and a little once there.
     for (const side of Object.values(this.sides)) {
-      const q = easeInOutCubic(side.at) * (1 - p);
+      const at = side === this.sides.left ? left : right;
+      const q = easeInOutCubic(at) * (1 - p);
       if (q === 0) continue;
       eye.addScaledVector(this.base.eye, -q).addScaledVector(side.pose.eye, q);
       target.addScaledVector(this.base.target, -q).addScaledVector(side.pose.target, q);
-      const turn = Math.sin(Math.PI * easeInOutCubic(side.at));
+      const turn = Math.sin(Math.PI * easeInOutCubic(at));
       eye.y -= 0.08 * turn;
       roll += side.dir * (0.012 * turn + 0.006 * q);
       zoom += FOCUS_ZOOM * q;
     }
-    this.camera.up.set(roll, 1, 0).normalize();
-    if (this.camera.fov !== this.baseFov * (1 - zoom)) {
-      this.camera.fov = this.baseFov * (1 - zoom);
-      this.camera.updateProjectionMatrix();
+    camera.up.set(roll, 1, 0).normalize();
+    if (camera.fov !== this.baseFov * (1 - zoom)) {
+      camera.fov = this.baseFov * (1 - zoom);
+      camera.updateProjectionMatrix();
     }
-    this.camera.lookAt(target);
-    this.camera.updateMatrixWorld();
+    camera.lookAt(target);
+    camera.updateMatrixWorld();
   }
 }

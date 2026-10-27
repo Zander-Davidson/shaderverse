@@ -98,6 +98,11 @@ export class ShaderRuntime {
     if (u) u.value = value;
   }
 
+  /** True while the mouse is held in the portal. */
+  get mouseHeld(): boolean {
+    return this.mouse.z > 0;
+  }
+
   /** Shadertoy mouse: xy while held, zw the click point, negated when released. */
   pointer(x: number, y: number, down: boolean, pressed: boolean): void {
     this.dirty = true;
