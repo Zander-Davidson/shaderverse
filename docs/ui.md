@@ -6,6 +6,11 @@ The interface is a real-time 3D scene rendered with Three.js, not a
 static background with HTML controls arranged over it. The user's point
 of view is from inside a spherical cockpit.
 
+> **Planned rework.** The [hanging rig](hanging-rig.md) (v1.0.x)
+> replaces the wall-mounted panels and knob arc described here with
+> monitors and a knob console hung from the ceiling on articulated
+> arms, and pulls the camera back from the portal.
+
 ## Cockpit geometry
 
 -   The cockpit is the interior of a large sphere.

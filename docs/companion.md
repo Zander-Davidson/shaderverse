@@ -149,7 +149,9 @@ start of the move, so the eye leads and the body follows.
 ## Staying out of the way
 
 The companion must never cover the portal, a knob, a panel, an overlay,
-or the knob tubing, and must never block a click.
+or the knob tubing, and must never block a click. (With the
+[hanging rig](hanging-rig.md#the-companion), the tubing goes away and
+the monitors, console and arms become the keep-out zones.)
 
 -   **Keep-out zones**, computed from the layout (`src/cockpit/layout.ts`):
     every panel rectangle, the portal bezel (`bezelRadius`), every knob
