@@ -52,7 +52,28 @@ export interface LayoutConfig {
   /** Half extents (wall units) the camera keeps in view, as well as every monitor. */
   fitHalfWidth: number;
   fitHalfHeight: number;
+  /**
+   * The focal circle of the view out the window: where the shader's center
+   * shows, what leaning in frames and what the companion keeps clear of.
+   */
   portal: { x: number; y: number; size: number };
+  /**
+   * The cockpit window, in wall units: a windscreen wider at its sill than at
+   * its head, divided by struts that lean toward an apex above the view.
+   */
+  window: {
+    sill: number;
+    head: number;
+    /** Left and right edges at the sill, and at the head. */
+    sillX: [number, number];
+    headX: [number, number];
+    /** Where the struts lean to. */
+    apex: [number, number];
+    /** Where the struts meet the sill, left to right. */
+    struts: number[];
+    /** Height of the cross strut over the outer panes. */
+    transom: number;
+  };
   /**
    * How square the monitors hang to the view: 0 faces each one at the eye
    * (the wide lens then stretches them like walls running toward the portal),
@@ -96,7 +117,16 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   eyeDistance: 10,
   fitHalfWidth: 5.5,
   fitHalfHeight: 5.6,
-  portal: { x: 0, y: 0.3, size: 6.8 },
+  portal: { x: 0, y: 0.8, size: 6.8 },
+  window: {
+    sill: -3.6,
+    head: 6.1,
+    sillX: [-12.6, 13.0],
+    headX: [-9.6, 10.2],
+    apex: [-1.4, 25],
+    struts: [-8.4, -3.5, 3.2, 8.7],
+    transom: 3.1,
+  },
   monitorFacing: 0.55,
   rail: { y: 3.9, z: 5.6, halfWidth: 5.6, bow: 1.0 },
   cornerRadius: 0.38,
@@ -141,7 +171,7 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
       // between the near monitors and the portal, and the plot's arm fills
       // the gap above it on the left.
       left: [{ x: -5.5, y: 6.0 }, { x: -6.5, y: 6.0 }],
-      right: [{ x: 3.0, y: 5.5 }, { x: 3.5, y: 5.0 }],
+      right: [{ x: 3.5, y: 5.5 }, { x: -4.5, y: 3.5 }],
       // Leaned in: beside the bezel, left or right of the portal.
       lean: [{ x: 6.0, y: 1.0 }, { x: -6.0, y: 1.0 }, { x: 6.0, y: -3.0 }],
     },

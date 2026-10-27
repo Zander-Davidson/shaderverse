@@ -106,6 +106,11 @@ export class Cockpit {
     this.scene.add(this.key);
     this.rim = new THREE.PointLight('#3ff2c4', 10, 0, 1.6);
     this.scene.add(this.rim);
+    // A faint cool light from the cabin, so the window's struts read against
+    // a dark view outside.
+    const cabin = new THREE.DirectionalLight('#b8c8d4', 0.5);
+    cabin.position.set(0.3, 0.6, -1);
+    this.scene.add(cabin);
     this.relayout(cfg);
   }
 

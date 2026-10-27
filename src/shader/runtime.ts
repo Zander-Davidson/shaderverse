@@ -1,10 +1,12 @@
-// Runs the active shader into a square render target. Swaps programs only
-// after a successful compile, so a broken edit never interrupts the image.
+// Runs the active shader into a render target shaped like the cockpit window.
+// Swaps programs only after a successful compile, so a broken edit never
+// interrupts the image.
 
 import * as THREE from 'three';
 import { compileShader, type CompileResult } from './compile';
 import { VERTEX_SHADER, VIEW_ZOOM_UNIFORM, knobUniformName, type WrapperParam } from './wrapper';
 
+/** Each quality's pixel count, as the side of a square of the same area. */
 export const QUALITY_SIZES = { low: 384, medium: 640, high: 1024 } as const;
 export type Quality = keyof typeof QUALITY_SIZES;
 
@@ -28,11 +30,15 @@ export class ShaderRuntime {
   private viewZoom = 1;
   /** Set when an input changes, so a paused shader re-renders once. */
   private dirty = true;
+  /** Width over height of the target, matching the window it shows through. */
+  private aspect = 1;
+  private quality: Quality;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
     quality: Quality = 'medium',
   ) {
+    this.quality = quality;
     const size = QUALITY_SIZES[quality];
     this.target = new THREE.WebGLRenderTarget(size, size, {
       depthBuffer: false,
@@ -47,13 +53,30 @@ export class ShaderRuntime {
     this.scene.add(this.quad);
   }
 
-  get size(): number {
+  get width(): number {
     return this.target.width;
   }
 
+  get height(): number {
+    return this.target.height;
+  }
+
   setQuality(quality: Quality): void {
-    const s = QUALITY_SIZES[quality];
-    if (s !== this.target.width) this.target.setSize(s, s);
+    this.quality = quality;
+    this.resize();
+  }
+
+  /** Shapes the target like the window: `aspect` wide per unit high, same pixel count. */
+  setAspect(aspect: number): void {
+    this.aspect = aspect;
+    this.resize();
+  }
+
+  private resize(): void {
+    const s = QUALITY_SIZES[this.quality];
+    const w = Math.round(s * Math.sqrt(this.aspect));
+    const h = Math.round(s / Math.sqrt(this.aspect));
+    if (w !== this.target.width || h !== this.target.height) this.target.setSize(w, h);
     this.dirty = true;
   }
 
@@ -117,9 +140,10 @@ export class ShaderRuntime {
   pointer(x: number, y: number, down: boolean, pressed: boolean): void {
     this.dirty = true;
     // Into the zoomed view's coordinates, the same as fragCoord.
-    const c = this.target.width / 2;
-    x = (x - c) * this.viewZoom + c;
-    y = (y - c) * this.viewZoom + c;
+    const cx = this.target.width / 2;
+    const cy = this.target.height / 2;
+    x = (x - cx) * this.viewZoom + cx;
+    y = (y - cy) * this.viewZoom + cy;
     if (pressed) this.mouse.set(x, y, x, y);
     else if (down) this.mouse.set(x, y, Math.abs(this.mouse.z), -Math.abs(this.mouse.w));
     else this.mouse.set(this.mouse.x, this.mouse.y, -Math.abs(this.mouse.z), -Math.abs(this.mouse.w));
@@ -140,8 +164,7 @@ export class ShaderRuntime {
     this.time += step;
     this.lastDelta = step;
     const u = this.material.uniforms;
-    const s = this.target.width;
-    (u.iResolution!.value as THREE.Vector3).set(s, s, 1);
+    (u.iResolution!.value as THREE.Vector3).set(this.target.width, this.target.height, 1);
     u.iTime!.value = this.time;
     u.iTimeDelta!.value = this.lastDelta;
     u.iFrame!.value = this.frame;

@@ -37,16 +37,16 @@ const BACKDROP_TEXEL = 0.06;
  */
 const FLATTEN = 0.85;
 /**
- * The shell behind the rig: darker and less mirror-like than the monitors'
- * chrome bezels, so the rig and the portal stand out against it.
+ * The hull around the window: plain, dark and matte, so the window, the rig
+ * and the view outside carry the cockpit.
  */
 const CONSOLE_FINISH: THREE.MeshPhysicalMaterialParameters = {
-  color: '#59646a',
-  roughness: 0.22,
-  envMapIntensity: 0.4,
-  clearcoat: 0.25,
-  clearcoatRoughness: 0.15,
-  iridescence: 0.1,
+  color: '#2b3034',
+  metalness: 0.6,
+  roughness: 0.62,
+  envMapIntensity: 0.3,
+  clearcoat: 0,
+  iridescence: 0,
 };
 
 /** A panel's bezel: its outer silhouette and screen opening, in panel pixels. */

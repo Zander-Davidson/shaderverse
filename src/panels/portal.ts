@@ -1,28 +1,55 @@
-// The central portal: shows the shader's square render target through a
-// circular mask. Pointer input becomes iMouse in the shader's pixel space.
+// The view out the cockpit window: the shader's render target across the
+// whole windscreen (src/cockpit/window.ts), masked to its outline, with a
+// faint haze and shading toward the frame so it reads as seen through glass.
+// Pointer input becomes iMouse in the shader's pixel space.
 
 import * as THREE from 'three';
-import { bezelRadius, type LayoutConfig } from '../cockpit/layout';
-import type { RingMold } from '../style/console';
+import type { LayoutConfig } from '../cockpit/layout';
+import { windowCorners, windowRect } from '../cockpit/window';
 import type { ShaderRuntime } from '../shader/runtime';
-import { CanvasPanel, type PanelPointerEvent, type PointerTarget } from './panel';
+import type { PanelPointerEvent, PointerTarget } from './panel';
 import { spherePatchGeometry } from './patch';
-import { HOLE_FRAG, HOLE_VERT, UNDER_LAYER } from '../cockpit/compositor';
+import { HOLE_VERT, UNDER_LAYER } from '../cockpit/compositor';
+
+/**
+ * Signed distance into the window, in wall units, from texture coordinate p:
+ * the corners are in texture coordinates and `scale` turns those into wall
+ * units. Positive inside.
+ */
+const WINDOW_MASK = /* glsl */ `
+uniform vec2 corners[4];
+uniform vec2 scale;
+float windowInside(vec2 p) {
+  float d = 1e3;
+  for (int i = 0; i < 4; i++) {
+    vec2 a = corners[i] * scale;
+    vec2 b = corners[(i + 1) % 4] * scale;
+    vec2 e = b - a;
+    d = min(d, (e.x * (p.y * scale.y - a.y) - e.y * (p.x * scale.x - a.x)) / length(e));
+  }
+  return d;
+}
+`;
 
 const PORTAL_FRAG = /* glsl */ `
 uniform sampler2D map;
-uniform float time;
 varying vec2 vUv;
+${WINDOW_MASK}
+float hash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 45758.5453); }
 void main() {
-  vec2 p = vUv * 2.0 - 1.0;
-  float r = length(p);
-  float aa = fwidth(r) * 1.5;
-  float mask = 1.0 - smoothstep(1.0 - aa, 1.0, r);
+  float d = windowInside(vUv);
+  float aa = fwidth(d) * 1.5;
+  float mask = smoothstep(-aa, 0.0, d);
   if (mask < 0.01) discard;
   vec3 col = texture2D(map, vUv).rgb;
-  // A faint glass edge so the shader reads as seen through a window.
-  col *= 1.0 - 0.35 * smoothstep(0.82, 1.0, r);
-  col += vec3(0.3, 0.8, 1.0) * 0.08 * smoothstep(0.93, 1.0, r) * mask;
+  // Glass: a faint cool haze, a little darker toward the frame, and a soft
+  // diagonal sheen; fine specks of dust catch the light.
+  col = mix(col, vec3(0.05, 0.08, 0.1), 0.05);
+  col *= 0.82 + 0.18 * smoothstep(0.0, 2.2, d);
+  vec2 w = vUv * scale;
+  col += vec3(0.6, 0.75, 0.85) * 0.025 * smoothstep(0.35, 0.0, abs(fract((w.x + w.y * 0.6) / 9.0) - 0.5));
+  vec2 cell = floor(w * 9.0);
+  col += vec3(0.5) * step(0.997, hash(cell)) * smoothstep(0.5, 0.0, length(fract(w * 9.0) - 0.5)) * 0.25;
   gl_FragColor = vec4(col, mask);
 }
 `;
@@ -35,72 +62,90 @@ void main() {
 }
 `;
 
-/** Where the console's portal collar rolls down into the rim, as a multiple of the portal radius. */
-const RIM_OPENING = 1.09;
-/** The rim canvas spans this multiple of the portal's size. */
-const RIM_SPAN = 1.16;
-
-/** The collar molded into the console around the portal and its rim. */
-export function portalMold(cfg: LayoutConfig): RingMold {
-  const pr = cfg.portal.size / 2;
-  return { x: cfg.portal.x, y: cfg.portal.y, outer: bezelRadius(cfg) + 0.03, opening: pr * RIM_OPENING };
+/** The window's stand-in in the cached cockpit: transparent, where the shader shows through. */
+const HOLE_FRAG = /* glsl */ `
+varying vec2 vUv;
+${WINDOW_MASK}
+void main() {
+  if (windowInside(vUv) < 0.0) discard;
+  gl_FragColor = vec4(0.0);
 }
+`;
 
 export class PortalPanel implements PointerTarget {
   readonly mesh: THREE.Mesh;
   readonly material: THREE.ShaderMaterial;
+  readonly hole: THREE.Mesh;
   pixelWidth: number;
   pixelHeight: number;
   private down = false;
   private downAt = { x: 0, y: 0, moved: 0 };
-  /** Called for a click (no drag) on the portal; a drag is mouse input to the shader. */
+  private readonly mask = { corners: { value: [0, 1, 2, 3].map(() => new THREE.Vector2()) }, scale: { value: new THREE.Vector2(1, 1) } };
+  /** Called for a click (no drag) on the window; a drag is mouse input to the shader. */
   onClick: (() => void) | null = null;
 
   constructor(
     private readonly runtime: ShaderRuntime,
     cfg: LayoutConfig,
   ) {
-    this.pixelWidth = this.pixelHeight = runtime.size;
+    this.pixelWidth = runtime.width;
+    this.pixelHeight = runtime.height;
     this.material = new THREE.ShaderMaterial({
       vertexShader: PORTAL_VERT,
       fragmentShader: PORTAL_FRAG,
-      uniforms: { map: { value: runtime.target.texture }, time: { value: 0 } },
+      uniforms: { map: { value: runtime.target.texture }, ...this.mask },
       transparent: true,
       toneMapped: false,
     });
-    this.mesh = new THREE.Mesh(this.geometry(cfg), this.material);
+    this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.mesh.renderOrder = 2;
-    // The portal changes every frame, so it renders live under the cached
-    // cockpit; in the cache, a transparent disc stands in for it.
+    // The view changes every frame, so it renders live under the cached
+    // cockpit; in the cache, a transparent stand-in leaves room for it.
     this.mesh.layers.set(UNDER_LAYER);
     this.hole = new THREE.Mesh(
       this.mesh.geometry,
-      new THREE.ShaderMaterial({ vertexShader: HOLE_VERT, fragmentShader: HOLE_FRAG, blending: THREE.NoBlending }),
+      new THREE.ShaderMaterial({ vertexShader: HOLE_VERT, fragmentShader: HOLE_FRAG, uniforms: this.mask, blending: THREE.NoBlending }),
     );
+    this.rebuild(cfg);
   }
-
-  readonly hole: THREE.Mesh;
 
   get meshes() {
     return [this.mesh];
   }
 
-  private geometry(cfg: LayoutConfig) {
-    const { x, y, size } = cfg.portal;
-    return spherePatchGeometry(x, y, size, size, cfg.radius, 0.03, 64, 64);
+  rebuild(cfg: LayoutConfig) {
+    const r = windowRect(cfg);
+    this.mesh.geometry.dispose();
+    this.mesh.geometry = spherePatchGeometry(r.x, r.y, r.w, r.h, cfg.radius, 0.03, 128, 64);
+    this.hole.geometry = this.mesh.geometry;
+    windowCorners(cfg).forEach(([x, y], i) => this.mask.corners.value[i]!.set((x - (r.x - r.w / 2)) / r.w, (y - (r.y - r.h / 2)) / r.h));
+    this.mask.scale.value.set(r.w, r.h);
+    // The shader renders in the window's shape.
+    this.runtime.setAspect(r.w / r.h);
   }
 
-  rebuild(cfg: LayoutConfig) {
-    this.mesh.geometry.dispose();
-    this.mesh.geometry = this.geometry(cfg);
-    this.hole.geometry = this.mesh.geometry;
+  /** Whether texture coordinate (u, v) is inside the window's outline. */
+  private inside(u: number, v: number): boolean {
+    const s = this.mask.scale.value;
+    const c = this.mask.corners.value;
+    for (let i = 0; i < 4; i++) {
+      const a = c[i]!;
+      const b = c[(i + 1) % 4]!;
+      if ((b.x - a.x) * s.x * (v - a.y) * s.y - (b.y - a.y) * s.y * (u - a.x) * s.x < 0) return false;
+    }
+    return true;
+  }
+
+  hitTest(x: number, y: number): boolean {
+    return this.inside(x / this.pixelWidth, 1 - y / this.pixelHeight);
   }
 
   onPointer(e: PanelPointerEvent): boolean {
-    this.pixelWidth = this.pixelHeight = this.runtime.size;
-    const inside = Math.hypot(e.u * 2 - 1, e.v * 2 - 1) <= 1;
-    const sx = e.u * this.runtime.size;
-    const sy = e.v * this.runtime.size; // Shadertoy: origin bottom-left
+    this.pixelWidth = this.runtime.width;
+    this.pixelHeight = this.runtime.height;
+    const inside = this.inside(e.u, e.v);
+    const sx = e.u * this.runtime.width;
+    const sy = e.v * this.runtime.height; // Shadertoy: origin bottom-left
     if (e.kind === 'down' && e.button === 0 && inside) {
       this.down = true;
       this.downAt = { x: e.clientX, y: e.clientY, moved: 0 };
@@ -120,69 +165,6 @@ export class PortalPanel implements PointerTarget {
   }
 
   cursorAt(x: number, y: number): string {
-    const s = this.runtime.size;
-    return Math.hypot((x / s) * 2 - 1, (y / s) * 2 - 1) <= 1 ? 'crosshair' : 'default';
-  }
-}
-
-/** Dial ring between the portal and its collar, recessed in the console; decorative, takes no input. */
-export class PortalRim extends CanvasPanel {
-  constructor(cfg: LayoutConfig) {
-    const s = cfg.portal.size * RIM_SPAN;
-    super({ x: cfg.portal.x, y: cfg.portal.y, w: s, h: s }, 1024, 1024, cfg.radius, 0.02);
-    this.mesh.renderOrder = 1;
-  }
-
-  relayout(cfg: LayoutConfig) {
-    const s = cfg.portal.size * RIM_SPAN;
-    this.rebuild(cfg.radius, { x: cfg.portal.x, y: cfg.portal.y, w: s, h: s });
-  }
-
-  protected draw(ctx: CanvasRenderingContext2D): void {
-    const S = this.pixelWidth;
-    const c = S / 2;
-    const inner = S / 2 / RIM_SPAN;
-    // Out to where the console's collar rises from its floor.
-    const outer = inner * RIM_OPENING;
-    ctx.clearRect(0, 0, S, S);
-
-    const ring = (r0: number, r1: number, fill: string | CanvasGradient) => {
-      ctx.beginPath();
-      ctx.arc(c, c, r1, 0, Math.PI * 2);
-      ctx.arc(c, c, r0, 0, Math.PI * 2, true);
-      ctx.fillStyle = fill;
-      ctx.fill();
-    };
-    const g = ctx.createRadialGradient(c, c, inner, c, c, outer);
-    g.addColorStop(0, '#1a232c');
-    g.addColorStop(0.6, '#0b1116');
-    g.addColorStop(1, '#030507');
-    ring(inner - 2, outer, g);
-    ring(inner - 2, inner + 4, '#24323e');
-
-    // Tick marks
-    ctx.save();
-    ctx.translate(c, c);
-    for (let i = 0; i < 120; i++) {
-      const major = i % 10 === 0;
-      ctx.rotate((Math.PI * 2) / 120);
-      ctx.fillStyle = major ? '#4fd1ff' : '#2d3d4a';
-      ctx.globalAlpha = major ? 0.8 : 1;
-      ctx.fillRect(inner + 8, -1.5, major ? 18 : 9, 3);
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-
-    // Emissive channel
-    const ch = inner + 32;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(c, c, ch, Math.PI * 0.15, Math.PI * 0.85);
-    ctx.strokeStyle = 'rgba(79, 209, 255, 0.35)';
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(c, c, ch, Math.PI * 1.15, Math.PI * 1.85);
-    ctx.strokeStyle = 'rgba(255, 122, 69, 0.3)';
-    ctx.stroke();
+    return this.hitTest(x, y) ? 'crosshair' : 'default';
   }
 }

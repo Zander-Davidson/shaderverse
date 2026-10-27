@@ -48,12 +48,13 @@ test('portal input becomes iMouse in shader pixels', async ({ page }) => {
   await page.mouse.move(portal.x + d, portal.y - d);
   const m = await page.evaluate(() => {
     const u = (window as any).__sv.runtime.material.uniforms.iMouse.value;
-    return { x: u.x, y: u.y, z: u.z, size: (window as any).__sv.runtime.size };
+    const rt = (window as any).__sv.runtime;
+    return { x: u.x, y: u.y, z: u.z, w: rt.width, h: rt.height };
   });
   await page.mouse.up();
   expect(m.z).toBeGreaterThan(0);
-  expect(Math.abs(m.x / m.size - 0.5)).toBeLessThan(0.1);
-  expect(m.y / m.size).toBeGreaterThan(0.5); // dragged up → larger y (origin bottom-left)
+  expect(Math.abs(m.x / m.w - 0.5)).toBeLessThan(0.1);
+  expect(m.y / m.h).toBeGreaterThan(0.5); // dragged up → larger y (origin bottom-left)
 });
 
 test('Space toggles playback', async ({ page }) => {

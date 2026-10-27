@@ -217,7 +217,7 @@ export class StatusPanel extends ReadoutPanel {
     this.row(ctx, 'FPS', this.fps.toFixed(0), 186);
     this.row(ctx, 'TIME', `${this.runtime.time.toFixed(2)}s`, 234);
     this.row(ctx, 'FRAME', String(this.runtime.frame), 282);
-    this.row(ctx, 'RES', `${this.runtime.size}²`, 330);
+    this.row(ctx, 'RES', `${this.runtime.width}×${this.runtime.height}`, 330);
 
     ctx.font = `600 16px ${MONO}`;
     ctx.fillStyle = COLORS.dim;

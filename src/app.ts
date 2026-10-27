@@ -8,7 +8,7 @@ import { Companion } from './companion/companion';
 import { Compositor } from './cockpit/compositor';
 import { Cockpit } from './cockpit/scene';
 import { Arms } from './cockpit/arms';
-import { HullCircuit } from './cockpit/hull';
+import { CockpitWindow } from './cockpit/window';
 import { ConsolePanel } from './console/console';
 import { PortalGlow } from './cockpit/glow';
 import { wallToWorld } from './panels/patch';
@@ -24,7 +24,7 @@ import { onPanelRedraw } from './panels/panel';
 import { PlotPanel } from './panels/plot';
 import { setGlassEnvironment } from './panels/monitor';
 import { PointerRouter } from './panels/pointer';
-import { PortalPanel, PortalRim, portalMold } from './panels/portal';
+import { PortalPanel } from './panels/portal';
 import { LibraryPanel, StatusPanel, type LibraryActions } from './panels/status';
 import {
   autosave,
@@ -74,7 +74,6 @@ export function startApp(root: HTMLElement): void {
   cockpit.setEnvironment(renderer);
   cockpit.fit(window.innerWidth / window.innerHeight);
   const portal = new PortalPanel(runtime, cfg);
-  const rim = new PortalRim(cfg);
   // The curved panel is the editor; ?editor=overlay restores the flat window.
   const useOverlay = new URLSearchParams(location.search).get('editor') === 'overlay';
   const editor: SceneEditor | EditorOverlay = useOverlay
@@ -126,24 +125,24 @@ export function startApp(root: HTMLElement): void {
   setGlassEnvironment(cockpit.glassEnvironment);
 
   const arms = new Arms(cfg);
-  const circuit = new HullCircuit(cfg);
+  const cockpitWindow = new CockpitWindow(cfg);
   // The portal lights the back of the rig in the shader's colors. (It sits
   // behind the screens, so their convex glass never shows it as a glint.)
   const glow = new PortalGlow(renderer, runtime, !LOW_GFX);
   const placeLights = () => wallToWorld(cfg.portal.x, cfg.portal.y, cfg.radius, 0.8, glow.light.position);
   placeLights();
   cockpit.scene.add(glow.light);
-  cockpit.scene.add(code.caret, portal.hole, rim.mesh, portal.mesh, plot.rig, code.rig, status.rig, library.rig, controls.rig, arms.group, circuit.group);
-  // The portal's collar, molded into the shell.
+  cockpit.scene.add(code.caret, portal.hole, portal.mesh, plot.rig, code.rig, status.rig, library.rig, controls.rig, arms.group, cockpitWindow.group);
+  // The shell around the window: plain, with nothing molded into it.
   const moldConsole = () =>
     cockpit.console.mold(renderer, cfg, {
       panels: [],
-      rings: [portalMold(cfg)],
+      rings: [],
       pipes: [],
     });
   moldConsole();
   const aniso = renderer.capabilities.getMaxAnisotropy();
-  for (const p of [rim, plot, code, status, library, controls]) p.setAnisotropy(aniso);
+  for (const p of [plot, code, status, library, controls]) p.setAnisotropy(aniso);
   knobs.setAnisotropy(aniso);
 
   const router = new PointerRouter(canvas, cockpit.camera);
@@ -164,7 +163,18 @@ export function startApp(root: HTMLElement): void {
   // Overlays
   const overlayBounds = (): { code: ScreenRect; portal: ScreenRect } => {
     const c = screenBounds(code.mesh, cockpit.camera, canvas);
-    const p = screenBounds(portal.mesh, cockpit.camera, canvas);
+    // The window's focal circle, where the shader's center shows.
+    const r = canvas.getBoundingClientRect();
+    const p: ScreenRect = { left: r.right, top: r.bottom, right: r.left, bottom: r.top };
+    const half = cfg.portal.size / 2;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const s = screenPoint(wallToWorld(cfg.portal.x + Math.cos(a) * half, cfg.portal.y + Math.sin(a) * half, cfg.radius, 0), cockpit.camera, canvas);
+      p.left = Math.min(p.left, s.x);
+      p.right = Math.max(p.right, s.x);
+      p.top = Math.min(p.top, s.y);
+      p.bottom = Math.max(p.bottom, s.y);
+    }
     return { code: c, portal: p };
   };
   const popover = new KnobPopover(store, (id) => {
@@ -306,7 +316,7 @@ export function startApp(root: HTMLElement): void {
     setGlassEnvironment(cockpit.glassEnvironment);
     moldConsole();
     runtime.recompile(store.getState().project.source);
-    for (const p of [rim, plot, code, status, library]) p.invalidate();
+    for (const p of [plot, code, status, library]) p.invalidate();
     for (const s of knobs.slots) s.face.invalidate();
     controls.invalidate();
     toast('Graphics context restored.');
@@ -333,7 +343,6 @@ export function startApp(root: HTMLElement): void {
     runtime.render(dt);
     // A new glow color relights the whole cached cockpit.
     if (glow.update(dt)) compositor.markAll();
-    rim.update();
     plot.update();
     code.update();
     status.update();
@@ -349,13 +358,12 @@ export function startApp(root: HTMLElement): void {
     cockpit.relayout(cfg);
     cockpit.fit(window.innerWidth / window.innerHeight);
     portal.rebuild(cfg);
-    rim.relayout(cfg);
     plot.relayout(cfg);
     code.relayout(cfg);
     status.relayout(cfg);
     library.relayout(cfg);
     arms.relayout(cfg);
-    circuit.relayout(cfg);
+    cockpitWindow.relayout(cfg);
     placeLights();
     controls.relayout(cfg);
     moldConsole();
