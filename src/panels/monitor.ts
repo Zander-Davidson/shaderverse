@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import type { LayoutConfig, MonitorLayout } from '../cockpit/layout';
 import { monitorFrame } from '../cockpit/rig';
-import { physicalMaterial } from '../style/quality';
+import { LOW_GFX, physicalMaterial } from '../style/quality';
 import { chromeMaterial, wallShape, type WallShape } from '../style/console';
 import { CanvasPanel } from './panel';
 
@@ -20,6 +20,25 @@ const BEZEL_DEPTH = 0.12;
 const FILLET = 0.045;
 /** Depth of the case behind the bezel. */
 const CASE_DEPTH = 0.3;
+/** How far the glass sits in front of the image, so reflections read as a layer over it. */
+const GLASS_GAP = 0.012;
+
+/**
+ * CRT touches on the image, all subtle: the corners darken toward the bezel,
+ * and fine scanlines fade out wherever they would be finer than a screen
+ * pixel, so they never shimmer.
+ */
+const CRT_FRAG = /* glsl */ `
+#include <map_fragment>
+{
+  vec2 q = (vMapUv - 0.5) / crtOpening;
+  float r = length(q * q * q * q);
+  diffuseColor.rgb *= 1.0 - 0.28 * smoothstep(0.15, 1.0, r) - 0.08 * dot(q, q) * 0.5;
+  float lines = vMapUv.y * crtLines;
+  float aa = clamp(1.6 - fwidth(lines) * 2.0, 0.0, 1.0);
+  diffuseColor.rgb *= 1.0 - 0.07 * aa * (0.5 + 0.5 * cos(6.2831853 * lines));
+}
+`;
 
 /** Height of the convex screen above its edge at (x, y), for a screen opening of half size hw × hh. */
 export function bulgeAt(x: number, y: number, hw: number, hh: number): number {
@@ -47,12 +66,16 @@ function roundedRect(path: THREE.Path, s: WallShape, grow = 0): void {
 
 let caseMaterial: THREE.MeshPhysicalMaterial | null = null;
 let bezelMaterial: THREE.MeshPhysicalMaterial | null = null;
+let glassMaterial: THREE.MeshPhysicalMaterial | null = null;
 
 export abstract class MonitorPanel extends CanvasPanel {
   /** The whole monitor: screen, bezel and case, posed in the cockpit. */
   readonly rig = new THREE.Group();
   private readonly bezelMesh: THREE.Mesh;
   private readonly caseMesh: THREE.Mesh;
+  /** Reflective glass over the image: black, so only its reflections add light. */
+  private readonly glassMesh: THREE.Mesh;
+  private readonly crt = { crtOpening: { value: new THREE.Vector2(0.5, 0.5) }, crtLines: { value: 1 } };
   private scale = 1;
 
   constructor(m: MonitorLayout, pixelWidth: number, pixelHeight: number) {
@@ -61,7 +84,28 @@ export abstract class MonitorPanel extends CanvasPanel {
     caseMaterial ??= physicalMaterial({ color: '#2a2c2e', metalness: 0.85, roughness: 0.42 });
     this.bezelMesh = new THREE.Mesh(new THREE.BufferGeometry(), bezelMaterial);
     this.caseMesh = new THREE.Mesh(new THREE.BufferGeometry(), caseMaterial);
-    this.rig.add(this.mesh, this.bezelMesh, this.caseMesh);
+    // Black and additive: the image shows through untouched and the glass
+    // adds the cockpit's reflection, strongest toward the edges (fresnel).
+    glassMaterial ??= physicalMaterial({
+      color: '#000000',
+      metalness: 0,
+      roughness: LOW_GFX ? 0.25 : 0.05,
+      ior: 1.7,
+      envMapIntensity: 1.6,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.glassMesh = new THREE.Mesh(new THREE.BufferGeometry(), glassMaterial);
+    this.glassMesh.raycast = () => {};
+    this.material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, this.crt);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('void main() {', 'uniform vec2 crtOpening;\nuniform float crtLines;\nvoid main() {')
+        .replace('#include <map_fragment>', CRT_FRAG);
+    };
+    this.material.customProgramCacheKey = () => 'crt-monitor';
+    this.rig.add(this.mesh, this.glassMesh, this.bezelMesh, this.caseMesh);
   }
 
   /** The screen opening in panel units, once a bezel is set. */
@@ -91,6 +135,7 @@ export abstract class MonitorPanel extends CanvasPanel {
     this.mesh.geometry.dispose();
     this.mesh.geometry = this.geometryFor();
     this.buildBody();
+    this.buildGlass();
     const f = monitorFrame(cfg, m);
     this.scale = f.scale;
     this.rig.position.copy(f.position);
@@ -133,6 +178,20 @@ export abstract class MonitorPanel extends CanvasPanel {
       curveSegments: 12,
     });
     this.caseMesh.position.z = this.bezelMesh.position.z - CASE_DEPTH;
+  }
+
+  private buildGlass(): void {
+    const o = this.opening;
+    if (!o) return;
+    const g = new THREE.PlaneGeometry(2 * o.hw, 2 * o.hh, 48, Math.max(12, Math.round((48 * o.hh) / o.hw)));
+    const pos = g.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) pos.setZ(i, bulgeAt(pos.getX(i), pos.getY(i), o.hw, o.hh) + GLASS_GAP);
+    g.computeVertexNormals();
+    this.glassMesh.geometry.dispose();
+    this.glassMesh.geometry = g;
+    // The opening in texture coordinates, and one scanline per three texels.
+    this.crt.crtOpening.value.set(o.hw / this.rect.w, o.hh / this.rect.h);
+    this.crt.crtLines.value = this.pixelHeight / 3;
   }
 
   /** World position of panel pixel (x, y) on the screen, `lift` world units off its surface. */

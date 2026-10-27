@@ -35,7 +35,15 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
     f.add(m, 'w', 0.5, 12, 0.05).onChange(onChange);
     f.add(m, 'h', 0.5, 10, 0.05).onChange(onChange);
     for (const k of ['yaw', 'pitch', 'roll'] as const) f.add(m, k, -45, 45, 0.5).onChange(onChange);
+    f.add(m.arm, 'mount', -6, 6, 0.01).name('arm mount').onChange(onChange);
+    (['x', 'y', 'z'] as const).forEach((n, i) => f.add(m.arm.elbow, i as 0 | 1 | 2, -8, 12, 0.01).name(`elbow ${n}`).onChange(onChange));
   };
+  const rail = gui.addFolder('rail');
+  rail.close();
+  rail.add(cfg.rail, 'y', 2, 10, 0.01).onChange(onChange);
+  rail.add(cfg.rail, 'z', 1, 12, 0.01).onChange(onChange);
+  rail.add(cfg.rail, 'halfWidth', 1, 10, 0.01).name('half width').onChange(onChange);
+  rail.add(cfg.rail, 'bow', -3, 3, 0.01).onChange(onChange);
   monitor('plot', cfg.plot);
   monitor('code', cfg.code);
   monitor('status', cfg.status);

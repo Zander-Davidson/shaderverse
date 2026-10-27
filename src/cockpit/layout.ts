@@ -24,6 +24,8 @@ export interface MonitorLayout {
   yaw: number;
   pitch: number;
   roll: number;
+  /** Its arm: where its carriage sits along the rail (rig x), and its elbow in rig space. */
+  arm: { mount: number; elbow: [number, number, number] };
 }
 
 export interface LayoutConfig {
@@ -41,6 +43,8 @@ export interface LayoutConfig {
    * 1 hangs them flat, parallel to the screen.
    */
   monitorFacing: number;
+  /** The overhead rail the arms hang from: height, depth at its middle, half length, and how far its ends curve toward the viewer. */
+  rail: { y: number; z: number; halfWidth: number; bow: number };
   /** Corner radius of panel silhouettes, in panel units. */
   cornerRadius: number;
   /** Knobs sit in a row below the portal, left to right: `y` below its center, `spacing` apart. */
@@ -78,15 +82,29 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   fitHalfHeight: 5.6,
   portal: { x: 0, y: 0.3, size: 6.8 },
   monitorFacing: 0.55,
+  rail: { y: 3.9, z: 5.6, halfWidth: 5.6, bow: 1.0 },
   cornerRadius: 0.38,
   knobRow: { y: -5.0, size: 1.05, spacing: 1.1 },
   // Source and plot on the left, readouts on the right, close to the camera
   // and framing the portal. Each is posed a little differently, as if the
-  // pilot swung it into place.
-  plot: { w: 4.9, h: 2.6, at: [-3.35, 1.45, 4.0], scale: 0.55, yaw: -4, pitch: 3, roll: 1.5 },
-  code: { w: 4.9, h: 5.4, at: [-3.3, -0.95, 3.8], scale: 0.55, yaw: 3, pitch: 0, roll: -0.8 },
-  status: { w: 4.0, h: 3.88, at: [3.15, 1.15, 3.9], scale: 0.55, yaw: -2, pitch: 2, roll: -1.2 },
-  library: { w: 4.0, h: 3.88, at: [3.2, -1.2, 3.7], scale: 0.55, yaw: -5, pitch: -2, roll: 0.7 },
+  // pilot swung it into place. The lower monitors' arms reach up behind the
+  // upper ones; no two elbows bend the same way.
+  plot: {
+    w: 4.9, h: 2.6, at: [-3.35, 1.45, 4.0], scale: 0.55, yaw: -4, pitch: 3, roll: 1.5,
+    arm: { mount: -0.9, elbow: [-1.8, 2.65, 5.35] },
+  },
+  code: {
+    w: 4.9, h: 5.4, at: [-3.3, -0.95, 3.8], scale: 0.55, yaw: 3, pitch: 0, roll: -0.8,
+    arm: { mount: -4.4, elbow: [-4.95, 0.55, 5.6] },
+  },
+  status: {
+    w: 4.0, h: 3.88, at: [3.15, 1.15, 3.9], scale: 0.55, yaw: -2, pitch: 2, roll: -1.2,
+    arm: { mount: 2.4, elbow: [4.25, 2.85, 5.15] },
+  },
+  library: {
+    w: 4.0, h: 3.88, at: [3.2, -1.2, 3.7], scale: 0.55, yaw: -5, pitch: -2, roll: 0.7,
+    arm: { mount: 4.7, elbow: [5.0, -0.25, 5.7] },
+  },
   companion: {
     size: 1.1,
     standoff: 0.3,

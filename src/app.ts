@@ -7,6 +7,9 @@ import { layout, type LayoutConfig } from './cockpit/layout';
 import { Companion } from './companion/companion';
 import { Compositor } from './cockpit/compositor';
 import { Cockpit } from './cockpit/scene';
+import { Arms } from './cockpit/arms';
+import { PortalGlow } from './cockpit/glow';
+import { wallToWorld } from './panels/patch';
 import { KnobBank } from './knobs/knobs';
 import { showBoot } from './overlays/boot';
 import { SceneEditor } from './editor/sceneEditor';
@@ -113,7 +116,14 @@ export function startApp(root: HTMLElement): void {
   const library = new LibraryPanel(cfg, store, libraryActions);
   const knobs = new KnobBank(cfg, store);
 
-  cockpit.scene.add(code.caret, portal.hole, rim.mesh, portal.mesh, plot.rig, code.rig, status.rig, library.rig, knobs.group);
+  const arms = new Arms(cfg);
+  // The portal lights the back of the rig in the shader's colors. (It sits
+  // behind the screens, so their convex glass never shows it as a glint.)
+  const glow = new PortalGlow(renderer, runtime, !LOW_GFX);
+  const placeLights = () => wallToWorld(cfg.portal.x, cfg.portal.y, cfg.radius, 0.8, glow.light.position);
+  placeLights();
+  cockpit.scene.add(glow.light);
+  cockpit.scene.add(code.caret, portal.hole, rim.mesh, portal.mesh, plot.rig, code.rig, status.rig, library.rig, arms.group, knobs.group);
   // The portal's and knobs' collars, molded into the shell as one piece.
   const moldConsole = () =>
     cockpit.console.mold(renderer, cfg, {
@@ -307,6 +317,8 @@ export function startApp(root: HTMLElement): void {
     }
     runtime.setViewZoom(cockpit.viewZoom);
     runtime.render(dt);
+    // A new glow color relights the whole cached cockpit.
+    if (glow.update(dt)) compositor.markAll();
     rim.update();
     plot.update();
     code.update();
@@ -327,6 +339,8 @@ export function startApp(root: HTMLElement): void {
     code.relayout(cfg);
     status.relayout(cfg);
     library.relayout(cfg);
+    arms.relayout(cfg);
+    placeLights();
     knobs.relayout(cfg);
     moldConsole();
     editor.position();
