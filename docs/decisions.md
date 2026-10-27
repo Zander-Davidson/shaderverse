@@ -30,9 +30,19 @@ Decisions made on 2026-10-26 about the AI companion ([Companion](companion.md)).
 | State display | The throb and gaze are the AI's status display; problems make it deform and pulse faster, never frantically | State without labels |
 | Sequencing | The body ships before the v1.1 agent | It depends only on the camera, layout and pointer |
 
+Decisions made on 2026-10-26 about the cockpit layout ([The hanging rig](hanging-rig.md)).
+
+| Topic | Decision | Reason |
+|---|---|---|
+| Camera distance | Pull the camera back and scale the portal up to keep its size on screen, keeping the field of view | Opens up the cockpit; a dolly zoom would flatten the depth |
+| Panels | Monitors hung from the ceiling on posed, articulated arms, closer to the camera than the portal | Depth and parallax; a cockpit the pilot has arranged for themselves, after *The Matrix* |
+| Monitor glass | Convex, reflective CRT-like glass in thin cases with chrome bezels | CRT character without the bulk; chrome keeps the house style |
+| Console | Drop the unibody chrome console and the knob tubing | The hanging pieces replace it; separate pieces give more room to play with depth |
+| Knob slots | Eight slots in the top row of a hanging control console, just below the portal on screen | Settles the open question on knob arrangement; keeps knobs near the portal |
+| Knob-to-code link | Color tint and hover highlighting instead of tubes | The tubes go with the console |
+
 ## Open questions
 
--   Number and arrangement of knob slots around the portal.
 -   Default range for a new knob (a starting heuristic is in the
     implementation plan).
 -   Font, size and texture resolution for the code display, decided by

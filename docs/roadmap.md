@@ -29,6 +29,23 @@ knobs, accounts and servers.
 
 The build plan is in [the v1.0 implementation plan](implementation-plan-v1.0.md).
 
+## v1.0.x: the hanging rig
+
+A cockpit rework that ships as a v1.0 point release, independent of the
+AI. The full design is in [The hanging rig](hanging-rig.md).
+
+-   The camera sits further back from the portal, which is scaled up to
+    keep its size on screen. The cockpit opens up into near, middle and
+    far layers of depth.
+-   The panels become hanging monitors: convex, reflective CRT-like
+    glass in thin cases with chrome bezels, each hung from the ceiling
+    on a mechanical arm with at least one joint, posed as if the pilot
+    adjusted it.
+-   The knobs move to a hanging control console just below the portal on
+    screen: eight knob slots in the top row, then decorative keys,
+    buttons and lamps.
+-   The unibody chrome console and the knob tubing are removed.
+
 ## v1.1: general-purpose agent
 
 A single agent turns prompts into shaders and knobs, embodied by the
@@ -89,8 +106,12 @@ server-backed implementation.
     grow alongside v1.3.
 -   Features drawn from the [reference interfaces](ui.md#reference-interfaces):
     rendered hands turning knobs, idle camera sway, background detail
-    beyond the cockpit, displays on articulated arms, visible cabling,
-    and whole-cockpit lighting moods.
+    beyond the cockpit, visible cabling, and whole-cockpit lighting
+    moods. Displays on articulated arms are scheduled in v1.0.x.
+-   Follow-ups to the hanging rig: dragging a monitor to repose its arm,
+    monitors swinging into view on their arms, real actions for the
+    console's buttons and keys, and cables from the console to the code
+    monitor ([The hanging rig](hanging-rig.md)).
 
 ## Relationship to the earlier phase plan
 
