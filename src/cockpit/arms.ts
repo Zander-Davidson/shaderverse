@@ -5,7 +5,7 @@
 // its cable alongside. The arms are posed once in the layout and never move.
 
 import * as THREE from 'three';
-import type { LayoutConfig, MonitorLayout } from './layout';
+import type { ArmLayout, HungLayout, LayoutConfig, MonitorLayout } from './layout';
 import { monitorFrame, rigToWorld } from './rig';
 import { chromeMaterial } from '../style/console';
 import { physicalMaterial } from '../style/quality';
@@ -22,17 +22,33 @@ const MOUNT_Z = -0.47;
 /** How far the yoke stands off the plate, to the wrist pivot. */
 const YOKE = 0.42;
 
-/** World points of a monitor's arm: rail carriage, elbow, wrist pivot, yoke plate. */
-export function armPoints(cfg: LayoutConfig, m: MonitorLayout) {
-  const f = monitorFrame(cfg, m);
-  const local = (z: number) => new THREE.Vector3(0, m.h * 0.12, z).multiplyScalar(f.scale).applyQuaternion(f.quaternion).add(f.position);
+/**
+ * World points of an arm holding a hung piece at `attach` (panel units on
+ * its back): rail carriage, elbow, wrist pivot, yoke plate.
+ */
+export function armPointsFor(cfg: LayoutConfig, piece: HungLayout, arm: ArmLayout, attach: [number, number]) {
+  const f = monitorFrame(cfg, piece);
+  const local = (z: number) => new THREE.Vector3(attach[0], attach[1], z).multiplyScalar(f.scale).applyQuaternion(f.quaternion).add(f.position);
   return {
-    mount: railPoint(cfg, m.arm.mount),
-    elbow: rigToWorld(cfg, m.arm.elbow[0], m.arm.elbow[1], m.arm.elbow[2]),
+    mount: railPoint(cfg, arm.mount),
+    elbow: rigToWorld(cfg, arm.elbow[0], arm.elbow[1], arm.elbow[2]),
     wrist: local(MOUNT_Z - YOKE),
     plate: local(MOUNT_Z),
     frame: f,
   };
+}
+
+/** A monitor's arm, meeting its back a little above center. */
+export function armPoints(cfg: LayoutConfig, m: MonitorLayout) {
+  return armPointsFor(cfg, m, m.arm, [0, m.h * 0.12]);
+}
+
+/** Every arm on the rig: the monitors' and the console's two. */
+export function allArmPoints(cfg: LayoutConfig) {
+  return [
+    ...[cfg.plot, cfg.code, cfg.status, cfg.library].map((m) => armPoints(cfg, m)),
+    ...cfg.console.arms.map((a) => armPointsFor(cfg, cfg.console, a, a.attach)),
+  ];
 }
 
 const Y = new THREE.Vector3(0, 1, 0);
@@ -74,7 +90,7 @@ export class Arms {
 
   private build(cfg: LayoutConfig): void {
     this.rail(cfg);
-    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library]) this.arm(cfg, m);
+    for (const a of allArmPoints(cfg)) this.arm(cfg, a);
     // Static, and never picked: pointer rays pass through to what's behind.
     this.group.traverse((o) => (o.raycast = () => {}));
   }
@@ -100,14 +116,15 @@ export class Arms {
     }
   }
 
-  private arm(cfg: LayoutConfig, m: MonitorLayout): void {
-    const { mount, elbow, wrist, plate, frame } = armPoints(cfg, m);
+  private arm(cfg: LayoutConfig, points: ReturnType<typeof armPointsFor>): void {
+    const { mount, elbow, wrist, plate, frame } = points;
     const k = frame.scale;
     const g = new THREE.Group();
 
     // Carriage: a rounded sleeve riding the rail, and the turntable it
     // swivels on below it.
-    const along = railPoint(cfg, m.arm.mount + 0.05).sub(railPoint(cfg, m.arm.mount - 0.05)).normalize();
+    const x = -mount.x; // rig x along the rail
+    const along = railPoint(cfg, x + 0.05).sub(railPoint(cfg, x - 0.05)).normalize();
     const carriage = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.22, 8, 20), this.metal);
     carriage.position.copy(mount);
     carriage.quaternion.setFromUnitVectors(Y, along);

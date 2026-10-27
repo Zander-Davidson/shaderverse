@@ -71,6 +71,18 @@ export class CodePanel extends MonitorPanel {
   private hovering = false;
   /** The library function name under the pointer, underlined. */
   private fnHover: FunctionHit | null = null;
+  /** Called when the pointer comes onto or leaves a knob's parameter. */
+  onKnobParamHover: ((param: string | null) => void) | null = null;
+  private paramHover: string | null = null;
+  /** A knob's parameter to light up, because its knob is hovered. */
+  private linkedParam: string | null = null;
+
+  setLinkedParam(param: string | null) {
+    if (param === this.linkedParam) return;
+    this.linkedParam = param;
+    this.invalidate();
+  }
+
   /** Called when the hovered function name changes. */
   onFunctionHover: ((hit: FunctionHit | null) => void) | null = null;
   private charW = 16;
@@ -383,11 +395,12 @@ export class CodePanel extends MonitorPanel {
         if (endX < TEXT_X) continue;
         if (x > W) break;
         const isKnob = seg.type === 'identifier' && knobParams.has(seg.text);
+        const linked = isKnob && (seg.text === this.linkedParam || seg.text === this.paramHover);
         if (isKnob) {
-          ctx.fillStyle = `${KNOB_TINT}30`;
+          ctx.fillStyle = linked ? `${KNOB_TINT}70` : `${KNOB_TINT}30`;
           ctx.fillRect(x - 2, y + 4, w + 4, CODE_LINE_PX - 8);
         }
-        const glow = isKnob ? KNOB_TINT : seg.glow;
+        const glow = linked ? '#eafff8' : isKnob ? KNOB_TINT : seg.glow;
         if (seg.type === 'whitespace') continue;
         if (glow) {
           // Interactive: bright, with a glow, against the muted syntax colors.
@@ -576,6 +589,25 @@ export class CodePanel extends MonitorPanel {
     return lines.slice(0, n).reduce((at, l) => at + l.length + 1, 0) + ch;
   }
 
+  /** The knob parameter whose name is at source offset `pos`, if any. */
+  private knobParamAt(pos: number): string | null {
+    const text = this.text;
+    const word = /[A-Za-z0-9_]/;
+    let a = pos;
+    let b = pos;
+    while (a > 0 && word.test(text[a - 1]!)) a--;
+    while (b < text.length && word.test(text[b]!)) b++;
+    const name = text.slice(a, b);
+    return this.store.getState().project.knobs.some((k) => k.param === name) ? name : null;
+  }
+
+  private setParamHover(param: string | null) {
+    if (param === this.paramHover) return;
+    this.paramHover = param;
+    this.invalidate();
+    this.onKnobParamHover?.(param);
+  }
+
   private setFunctionHover(hit: FunctionHit | null) {
     if (hit?.from === this.fnHover?.from && hit?.fn === this.fnHover?.fn) return;
     this.fnHover = hit;
@@ -592,6 +624,7 @@ export class CodePanel extends MonitorPanel {
       }
       const pos = h ? this.charAt(e.x, e.y) : null;
       this.setFunctionHover(pos === null ? null : functionAt(this.text, pos));
+      this.setParamHover(pos === null ? null : this.knobParamAt(pos));
       return;
     }
     if (e.kind === 'wheel') {

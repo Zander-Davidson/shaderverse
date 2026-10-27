@@ -5,7 +5,7 @@
 // coordinates and never know the screen bulges.
 
 import * as THREE from 'three';
-import type { LayoutConfig, MonitorLayout } from '../cockpit/layout';
+import type { HungLayout, LayoutConfig } from '../cockpit/layout';
 import { monitorFrame } from '../cockpit/rig';
 import { LOW_GFX, physicalMaterial } from '../style/quality';
 import { chromeMaterial, wallShape, type WallShape } from '../style/console';
@@ -84,9 +84,12 @@ export abstract class MonitorPanel extends CanvasPanel {
   private readonly glassMesh: THREE.Mesh;
   private readonly crt = { crtOpening: { value: new THREE.Vector2(0.5, 0.5) }, crtLines: { value: 1 } };
   private scale = 1;
+  /** A screen bulges under glass; a plate (the console's face) is flat and printed. */
+  private readonly flat: boolean;
 
-  constructor(m: MonitorLayout, pixelWidth: number, pixelHeight: number) {
+  constructor(m: HungLayout, pixelWidth: number, pixelHeight: number, kind: 'screen' | 'plate' = 'screen') {
     super({ x: 0, y: 0, w: m.w, h: m.h }, pixelWidth, pixelHeight, 0, 0);
+    this.flat = kind === 'plate';
     bezelMaterial ??= chromeMaterial();
     caseMaterial ??= physicalMaterial({ color: '#2a2c2e', metalness: 0.85, roughness: 0.42 });
     this.bezelMesh = new THREE.Mesh(new THREE.BufferGeometry(), bezelMaterial);
@@ -112,7 +115,13 @@ export abstract class MonitorPanel extends CanvasPanel {
         .replace('#include <map_fragment>', CRT_FRAG);
     };
     this.material.customProgramCacheKey = () => 'crt-monitor';
-    this.rig.add(this.mesh, this.glassMesh, this.bezelMesh, this.caseMesh);
+    this.rig.add(this.mesh, this.bezelMesh, this.caseMesh);
+    if (this.flat) {
+      this.material.onBeforeCompile = () => {};
+      this.material.customProgramCacheKey = () => '';
+    } else {
+      this.rig.add(this.glassMesh);
+    }
   }
 
   /** The screen opening in panel units, once a bezel is set. */
@@ -130,14 +139,14 @@ export abstract class MonitorPanel extends CanvasPanel {
       const y = pos.getY(i);
       // Tucked a hair under the bezel's lip outside the opening.
       const inside = o && Math.abs(x) <= o.hw && Math.abs(y) <= o.hh;
-      pos.setZ(i, inside ? bulgeAt(x, y, o.hw, o.hh) : -0.01);
+      pos.setZ(i, !inside ? -0.01 : this.flat ? 0 : bulgeAt(x, y, o.hw, o.hh));
     }
     g.computeVertexNormals();
     return g;
   }
 
   /** Hangs the monitor for a layout: rebuilds its screen, bezel and case and poses it. */
-  hang(cfg: LayoutConfig, m: MonitorLayout): void {
+  hang(cfg: LayoutConfig, m: HungLayout): void {
     this.rect = { x: 0, y: 0, w: m.w, h: m.h };
     this.mesh.geometry.dispose();
     this.mesh.geometry = this.geometryFor();
@@ -207,7 +216,7 @@ export abstract class MonitorPanel extends CanvasPanel {
     const x = (px / this.pixelWidth - 0.5) * w;
     const y = (0.5 - py / this.pixelHeight) * h;
     const o = this.opening;
-    const z = o ? bulgeAt(x, y, o.hw, o.hh) : 0;
+    const z = o && !this.flat ? bulgeAt(x, y, o.hw, o.hh) : 0;
     this.rig.updateMatrixWorld(true);
     return out.set(x, y, z + lift / this.scale).applyMatrix4(this.mesh.matrixWorld);
   }

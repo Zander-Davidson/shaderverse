@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { layoutCircuit } from '../../src/cockpit/hull';
-import { DEFAULT_LAYOUT, bezelRadius, knobSlotPosition } from '../../src/cockpit/layout';
-import { KNOB_SLOTS } from '../../src/project/schema';
+import { DEFAULT_LAYOUT, bezelRadius } from '../../src/cockpit/layout';
 
 describe('hull circuit', () => {
   const cfg = structuredClone(DEFAULT_LAYOUT);
@@ -17,15 +16,6 @@ describe('hull circuit', () => {
     for (const t of traces) {
       expect(r(t.points[0]!)).toBeGreaterThan(bezelRadius(cfg));
       expect(r(t.points[t.points.length - 1]!)).toBeGreaterThan(r(t.points[0]!));
-    }
-  });
-
-  it('keeps clear of the knob row', () => {
-    const k0 = knobSlotPosition(cfg, 0, KNOB_SLOTS);
-    const k1 = knobSlotPosition(cfg, KNOB_SLOTS - 1, KNOB_SLOTS);
-    const h = cfg.knobRow.size / 2;
-    for (const t of traces) {
-      for (const [x, y] of t.points) expect(x > k0.x - h && x < k1.x + h && Math.abs(y - k0.y) < h).toBe(false);
     }
   });
 

@@ -11,21 +11,37 @@ export interface Rect {
 }
 
 /**
- * A monitor hung on the rig. Its panel size, in panel units, sets the
- * texture's resolution and aspect; `scale` turns panel units into world units.
+ * A piece hung on the rig. Its panel size, in panel units, sets the texture's
+ * resolution and aspect; `scale` turns panel units into world units.
  */
-export interface MonitorLayout {
+export interface HungLayout {
   w: number;
   h: number;
-  /** Center of the screen in rig space: eye-relative, x right, y up, z forward. */
+  /** Center of its face in rig space: eye-relative, x right, y up, z forward. */
   at: [number, number, number];
   scale: number;
   /** Posed turn beyond facing the eye, in degrees (see monitorFrame). */
   yaw: number;
   pitch: number;
   roll: number;
-  /** Its arm: where its carriage sits along the rail (rig x), and its elbow in rig space. */
-  arm: { mount: number; elbow: [number, number, number] };
+}
+
+/** An arm: where its carriage sits along the rail (rig x), and its elbow in rig space. */
+export interface ArmLayout {
+  mount: number;
+  elbow: [number, number, number];
+}
+
+export interface MonitorLayout extends HungLayout {
+  arm: ArmLayout;
+}
+
+/**
+ * The hanging control console: a tray of knobs, buttons and keys below the
+ * portal. Its arms meet its back at `attach` (panel units, from its center).
+ */
+export interface ConsoleLayout extends HungLayout {
+  arms: (ArmLayout & { attach: [number, number] })[];
 }
 
 export interface LayoutConfig {
@@ -47,13 +63,13 @@ export interface LayoutConfig {
   rail: { y: number; z: number; halfWidth: number; bow: number };
   /** Corner radius of panel silhouettes, in panel units. */
   cornerRadius: number;
-  /** Knobs sit in a row below the portal, left to right: `y` below its center, `spacing` apart. */
-  knobRow: { y: number; size: number; spacing: number };
+
   /** Function plot, above the code. */
   plot: MonitorLayout;
   code: MonitorLayout;
   status: MonitorLayout;
   library: MonitorLayout;
+  console: ConsoleLayout;
   companion: CompanionLayout;
 }
 
@@ -84,7 +100,6 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   monitorFacing: 0.55,
   rail: { y: 3.9, z: 5.6, halfWidth: 5.6, bow: 1.0 },
   cornerRadius: 0.38,
-  knobRow: { y: -5.0, size: 1.05, spacing: 1.1 },
   // Source and plot on the left, readouts on the right, close to the camera
   // and framing the portal. Each is posed a little differently, as if the
   // pilot swung it into place. The lower monitors' arms reach up behind the
@@ -104,6 +119,16 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   library: {
     w: 4.0, h: 3.88, at: [3.2, -1.2, 3.7], scale: 0.55, yaw: -5, pitch: -2, roll: 0.7,
     arm: { mount: 4.7, elbow: [5.0, -0.25, 5.7] },
+  },
+  // Below the portal, between the monitor columns, tipped back like a
+  // keyboard tray. Its arms drop behind the monitor columns, clear of the
+  // portal, and reach in to its back edge.
+  console: {
+    w: 7.2, h: 2.7, at: [0.07, -1.76, 3.42], scale: 0.43, yaw: 1.5, pitch: -38, roll: 0.6,
+    arms: [
+      { mount: -3.2, elbow: [-2.8, -1.1, 5.3], attach: [-2.6, 0.7] },
+      { mount: 3.35, elbow: [2.9, -1.35, 5.25], attach: [2.7, 0.6] },
+    ],
   },
   companion: {
     size: 1.1,
@@ -127,11 +152,3 @@ export const layout: LayoutConfig = structuredClone(DEFAULT_LAYOUT);
 
 /** Outer radius of the portal's chrome bezel, in wall units. */
 export const bezelRadius = (cfg: LayoutConfig) => (cfg.portal.size / 2) * 1.15 + 0.04;
-
-/** Wall coordinates of knob slot `i` of `count`, left to right in the row below the portal. */
-export function knobSlotPosition(cfg: LayoutConfig, i: number, count: number): { x: number; y: number } {
-  return {
-    x: cfg.portal.x + (i - (count - 1) / 2) * cfg.knobRow.spacing,
-    y: cfg.portal.y + cfg.knobRow.y,
-  };
-}

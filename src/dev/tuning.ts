@@ -48,11 +48,17 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
   monitor('code', cfg.code);
   monitor('status', cfg.status);
   monitor('library', cfg.library);
-  const row = gui.addFolder('knob row');
-  row.close();
-  row.add(cfg.knobRow, 'y', -8, 0, 0.01).onChange(onChange);
-  row.add(cfg.knobRow, 'size', 0.4, 2.5, 0.01).onChange(onChange);
-  row.add(cfg.knobRow, 'spacing', 0.4, 3, 0.01).onChange(onChange);
+  const con = gui.addFolder('console');
+  con.close();
+  con.add(cfg.console.at, '0', -4, 4, 0.01).name('x').onChange(onChange);
+  con.add(cfg.console.at, '1', -5, 2, 0.01).name('y').onChange(onChange);
+  con.add(cfg.console.at, '2', 1, 8, 0.01).name('z').onChange(onChange);
+  con.add(cfg.console, 'scale', 0.1, 1.2, 0.005).onChange(onChange);
+  for (const k of ['yaw', 'pitch', 'roll'] as const) con.add(cfg.console, k, -80, 45, 0.5).onChange(onChange);
+  cfg.console.arms.forEach((a, n) => {
+    con.add(a, 'mount', -6, 6, 0.01).name(`arm ${n + 1} mount`).onChange(onChange);
+    (['x', 'y', 'z'] as const).forEach((c, i) => con.add(a.elbow, i as 0 | 1 | 2, -8, 12, 0.01).name(`arm ${n + 1} elbow ${c}`).onChange(onChange));
+  });
   const comp = gui.addFolder('companion');
   comp.close();
   comp.add(cfg.companion, 'size', 0.3, 2, 0.01).onChange(onChange);

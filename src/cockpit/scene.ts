@@ -5,7 +5,8 @@ import { ChromeConsole } from '../style/console';
 import { cockpitEnvironment, glassEnvironment } from './environment';
 import { LOW_GFX } from '../style/quality';
 import { wallToWorld } from '../panels/patch';
-import { bezelRadius, knobSlotPosition, type LayoutConfig } from './layout';
+import { bezelRadius, type LayoutConfig } from './layout';
+import { consolePoint, KNOB_FACE, KNOB_STRIP, knobLocal } from '../console/plan';
 import { monitorCenter, monitorCorners } from './rig';
 import { KNOB_SLOTS } from '../project/schema';
 
@@ -162,8 +163,8 @@ export class Cockpit {
         tanV = Math.max(tanV, Math.abs(p.y) / depth, Math.abs(p.x) / depth / aspect);
       }
     }
-    // And every hanging monitor, whole.
-    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library]) {
+    // And every hanging monitor and the console, whole.
+    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library, cfg.console]) {
       for (const c of monitorCorners(cfg, m)) {
         c.applyMatrix4(inv);
         tanV = Math.max(tanV, Math.abs(c.y) / -c.z, Math.abs(c.x) / -c.z / aspect);
@@ -183,30 +184,78 @@ export class Cockpit {
     this.applyPose();
   }
 
-  /** Leaned in: straight on to the portal, close enough that it and the knob ring fill the view. */
+  /**
+   * Leaned in: the head comes forward and down toward the portal, as close
+   * as it can while the portal's bezel stays in view above and the console's
+   * knob row, labels included, along the bottom edge.
+   */
   private computeLeanPose(tanHalfV: number, aspect: number) {
     const cfg = this.cfg;
-    // Frame the portal's bezel and every knob slot.
-    const b = bezelRadius(cfg);
-    let x0 = cfg.portal.x - b;
-    let x1 = cfg.portal.x + b;
-    let y0 = cfg.portal.y - b;
-    let y1 = cfg.portal.y + b;
-    const h = cfg.knobRow.size / 2;
-    for (let i = 0; i < KNOB_SLOTS; i++) {
-      const p = knobSlotPosition(cfg, i, KNOB_SLOTS);
-      x0 = Math.min(x0, p.x - h);
-      x1 = Math.max(x1, p.x + h);
-      y0 = Math.min(y0, p.y - h);
-      y1 = Math.max(y1, p.y + h);
-    }
     wallToWorld(cfg.portal.x, cfg.portal.y, cfg.radius, 0, this.portalCenter);
-    wallToWorld((x0 + x1) / 2, (y0 + y1) / 2, cfg.radius, 0, this.leaned.target);
-    const ex = ((x1 - x0) / 2) * 1.15;
-    const ey = ((y1 - y0) / 2) * 1.15;
-    const dist = Math.max(ey / tanHalfV, ex / (tanHalfV * aspect));
-    const outward = this.leaned.target.clone().normalize();
-    this.leaned.eye.copy(this.leaned.target).addScaledVector(outward, -dist);
+    const b = bezelRadius(cfg);
+    const frame: THREE.Vector3[] = [];
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      frame.push(wallToWorld(cfg.portal.x + Math.cos(a) * b, cfg.portal.y + Math.sin(a) * b, cfg.radius, 0));
+    }
+    const knobs: THREE.Vector3[] = [];
+    for (const i of [0, KNOB_SLOTS - 1]) {
+      const [x, y] = knobLocal(i);
+      for (const [dx, dy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]] as const) {
+        knobs.push(consolePoint(cfg, x + (dx * KNOB_FACE) / 2, y + (dy > 0 ? KNOB_FACE / 2 : -KNOB_FACE / 2 - KNOB_STRIP), 0.15));
+      }
+    }
+    frame.push(...knobs);
+    // Aim halfway, by angle, between the top of the bezel and the bottom of
+    // the knob strips; come forward and down as far as everything still fits,
+    // trying a few rates of descent and keeping the one that brings the
+    // portal closest.
+    const top = wallToWorld(cfg.portal.x, cfg.portal.y + b, cfg.radius, 0);
+    // The middle of the strips' bottom edge, under the row's center.
+    const low = knobs.filter((_, i) => i % 4 >= 2);
+    const bottom = low.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(low.length);
+    const cam = new THREE.PerspectiveCamera();
+    const v = new THREE.Vector3();
+    const aimFrom = (eye: THREE.Vector3, out: THREE.Vector3) => {
+      const up = top.clone().sub(eye).normalize();
+      const down = bottom.clone().sub(eye).normalize();
+      return out.copy(eye).add(up.add(down).normalize());
+    };
+    const fits = (eye: THREE.Vector3) => {
+      cam.position.copy(eye);
+      cam.lookAt(aimFrom(eye, v));
+      cam.updateMatrixWorld();
+      for (const p of frame) {
+        v.copy(p).applyMatrix4(cam.matrixWorldInverse);
+        const depth = -v.z;
+        if (depth < 0.5) return false;
+        if (Math.abs(v.y) / depth > tanHalfV / 1.06 || Math.abs(v.x) / depth > (tanHalfV * aspect) / 1.06) return false;
+      }
+      return true;
+    };
+    let best = this.base.eye.clone();
+    let bestDist = best.distanceTo(this.portalCenter);
+    const eye = new THREE.Vector3();
+    for (let drop = 0; drop <= 0.8; drop += 0.1) {
+      const step = new THREE.Vector3(0, -drop, 1);
+      let lo = 0;
+      let hi = cfg.eyeDistance;
+      for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(eye.copy(this.base.eye).addScaledVector(step, mid))) lo = mid;
+        else hi = mid;
+      }
+      eye.copy(this.base.eye).addScaledVector(step, lo);
+      const d = eye.distanceTo(this.portalCenter);
+      if (d < bestDist) {
+        best = eye.clone();
+        bestDist = d;
+      }
+    }
+    this.leaned.eye.copy(best);
+    aimFrom(best, this.leaned.target);
+    // Look as far off as the wall, so turning and leaning blend smoothly.
+    this.leaned.target.sub(best).multiplyScalar(cfg.eyeDistance).add(best);
   }
 
   /**

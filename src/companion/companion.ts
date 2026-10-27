@@ -3,14 +3,14 @@
 // watches the user, the cursor, the portal or the knob that just moved.
 
 import * as THREE from 'three';
-import { bezelRadius, knobSlotPosition, type LayoutConfig } from '../cockpit/layout';
+import { bezelRadius, type LayoutConfig } from '../cockpit/layout';
+import { knobWorld } from '../console/plan';
 import type { CameraView, Cockpit } from '../cockpit/scene';
 import type { KnobBank } from '../knobs/knobs';
 import type { PanelPointerEvent, PointerTarget } from '../panels/panel';
 import { wallToWorld } from '../panels/patch';
 import { monitorCorners } from '../cockpit/rig';
-import { armPoints } from '../cockpit/arms';
-import { KNOB_SLOTS } from '../project/schema';
+import { allArmPoints } from '../cockpit/arms';
 import type { ProjectStore } from '../project/store';
 import type { ShaderRuntime } from '../shader/runtime';
 import { toast } from '../overlays/help';
@@ -316,8 +316,7 @@ export class Companion implements PointerTarget {
         return this.screen(wallToWorld(x, y, cfg.radius, 0, this.w), camera);
       }
       case 'knob': {
-        const p = knobSlotPosition(cfg, focus.slot, KNOB_SLOTS);
-        return this.screen(wallToWorld(p.x, p.y, cfg.radius, 0, this.w), camera);
+        return this.screen(knobWorld(cfg, focus.slot, this.w), camera);
       }
     }
   }
@@ -390,7 +389,8 @@ export class Companion implements PointerTarget {
     };
     const view = new THREE.Vector3();
     const boxes: Box[] = [];
-    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library]) {
+    // The monitors and the console.
+    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library, cfg.console]) {
       // Leaned in, the monitors pass behind the camera, where they project
       // inside out; those keep nothing out.
       const corners = monitorCorners(cfg, m);
@@ -406,13 +406,8 @@ export class Companion implements PointerTarget {
       boxes.push(b);
     }
     const circles: Circle[] = [circle(cfg.portal.x, cfg.portal.y, bezelRadius(cfg))];
-    for (let i = 0; i < KNOB_SLOTS; i++) {
-      const k = knobSlotPosition(cfg, i, KNOB_SLOTS);
-      circles.push(circle(k.x, k.y, cfg.knobRow.size / 2));
-    }
     // The arms, as a chain of circles down each one, where they're in front of the camera.
-    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library]) {
-      const a = armPoints(cfg, m);
+    for (const a of allArmPoints(cfg)) {
       const shoulder = a.mount.clone().add(new THREE.Vector3(0, -0.3, 0));
       for (const [from, to] of [[shoulder, a.elbow], [a.elbow, a.wrist]] as const) {
         const n = Math.max(1, Math.ceil(from.distanceTo(to) / 0.2));

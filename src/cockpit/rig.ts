@@ -3,7 +3,7 @@
 // eye: x right, y up, z forward. Pure math, so it can be unit tested.
 
 import * as THREE from 'three';
-import type { LayoutConfig, MonitorLayout } from './layout';
+import type { HungLayout, LayoutConfig } from './layout';
 
 /** World position of rig point (x, y, z). The camera looks down world +z with its right on world -x. */
 export function rigToWorld(cfg: LayoutConfig, x: number, y: number, z: number, out = new THREE.Vector3()) {
@@ -36,7 +36,7 @@ const euler = new THREE.Euler();
  * (cfg.monitorFacing), then turned by its posed yaw, pitch and roll, so no
  * two hang quite square to the seat.
  */
-export function monitorFrame(cfg: LayoutConfig, m: MonitorLayout): Frame {
+export function monitorFrame(cfg: LayoutConfig, m: HungLayout): Frame {
   const position = rigToWorld(cfg, m.at[0], m.at[1], m.at[2]);
   const eye = eyeWorld(cfg);
   // Matrix4.lookAt points local +z from the target to the eye.
@@ -54,7 +54,7 @@ export function monitorFrame(cfg: LayoutConfig, m: MonitorLayout): Frame {
 }
 
 /** World corners of a monitor's outline (screen plus bezel), clockwise from top left. */
-export function monitorCorners(cfg: LayoutConfig, m: MonitorLayout): THREE.Vector3[] {
+export function monitorCorners(cfg: LayoutConfig, m: HungLayout): THREE.Vector3[] {
   const f = monitorFrame(cfg, m);
   const hw = (m.w / 2) * f.scale;
   const hh = (m.h / 2) * f.scale;
@@ -67,6 +67,6 @@ export function monitorCorners(cfg: LayoutConfig, m: MonitorLayout): THREE.Vecto
 }
 
 /** World center of a monitor. */
-export function monitorCenter(cfg: LayoutConfig, m: MonitorLayout, out = new THREE.Vector3()) {
+export function monitorCenter(cfg: LayoutConfig, m: HungLayout, out = new THREE.Vector3()) {
   return rigToWorld(cfg, m.at[0], m.at[1], m.at[2], out);
 }

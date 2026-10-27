@@ -8,11 +8,10 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { bezelRadius, knobSlotPosition, type LayoutConfig } from './layout';
+import { bezelRadius, type LayoutConfig } from './layout';
 import { wallToWorld } from '../panels/patch';
 import { chromeMaterial } from '../style/console';
 import { LOW_GFX, physicalMaterial } from '../style/quality';
-import { KNOB_SLOTS } from '../project/schema';
 
 /** A small deterministic PRNG. */
 function mulberry32(seed: number) {
@@ -69,13 +68,7 @@ export function layoutCircuit(cfg: LayoutConfig, seed = 7): { traces: Trace[]; n
   const nodes: Node[] = [];
   const placed: { a: P; b: P; r: number }[] = [];
 
-  // Keep clear of the knob row (until the console takes the knobs).
-  const k0 = knobSlotPosition(cfg, 0, KNOB_SLOTS);
-  const k1 = knobSlotPosition(cfg, KNOB_SLOTS - 1, KNOB_SLOTS);
-  const kh = cfg.knobRow.size * 0.75;
-  const blocked = (p: P) => p[0] > k0.x - kh && p[0] < k1.x + kh && p[1] > k0.y - kh && p[1] < k0.y + kh;
   const free = (a: P, b: P, r: number, skip: number) => {
-    for (let i = 0; i < 6; i++) if (blocked([a[0] + ((b[0] - a[0]) * i) / 5, a[1] + ((b[1] - a[1]) * i) / 5])) return false;
     for (let i = 0; i < placed.length - skip; i++) {
       const s = placed[i]!;
       if (segSegDist(a, b, s.a, s.b) < r + s.r + GAP) return false;

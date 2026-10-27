@@ -9,6 +9,7 @@ import { Compositor } from './cockpit/compositor';
 import { Cockpit } from './cockpit/scene';
 import { Arms } from './cockpit/arms';
 import { HullCircuit } from './cockpit/hull';
+import { ConsolePanel } from './console/console';
 import { PortalGlow } from './cockpit/glow';
 import { wallToWorld } from './panels/patch';
 import { KnobBank } from './knobs/knobs';
@@ -116,7 +117,12 @@ export function startApp(root: HTMLElement): void {
     toggleHelp: () => helpOverlay.toggle(),
   };
   const library = new LibraryPanel(cfg, store, libraryActions);
-  const knobs = new KnobBank(cfg, store);
+  const knobs = new KnobBank(store);
+  // The hanging control console: the knobs, playback and quality buttons.
+  const controls = new ConsolePanel(cfg, store, knobs);
+  // Knobs and their parameters in the code light each other up.
+  knobs.onHover = (k) => code.setLinkedParam(k?.param ?? null);
+  code.onKnobParamHover = (param) => knobs.highlight(param);
   setGlassEnvironment(cockpit.glassEnvironment);
 
   const arms = new Arms(cfg);
@@ -127,17 +133,17 @@ export function startApp(root: HTMLElement): void {
   const placeLights = () => wallToWorld(cfg.portal.x, cfg.portal.y, cfg.radius, 0.8, glow.light.position);
   placeLights();
   cockpit.scene.add(glow.light);
-  cockpit.scene.add(code.caret, portal.hole, rim.mesh, portal.mesh, plot.rig, code.rig, status.rig, library.rig, arms.group, circuit.group, knobs.group);
-  // The portal's and knobs' collars, molded into the shell as one piece.
+  cockpit.scene.add(code.caret, portal.hole, rim.mesh, portal.mesh, plot.rig, code.rig, status.rig, library.rig, controls.rig, arms.group, circuit.group);
+  // The portal's collar, molded into the shell.
   const moldConsole = () =>
     cockpit.console.mold(renderer, cfg, {
       panels: [],
-      rings: [portalMold(cfg), ...knobs.molds(cfg)],
+      rings: [portalMold(cfg)],
       pipes: [],
     });
   moldConsole();
   const aniso = renderer.capabilities.getMaxAnisotropy();
-  for (const p of [rim, plot, code, status, library]) p.setAnisotropy(aniso);
+  for (const p of [rim, plot, code, status, library, controls]) p.setAnisotropy(aniso);
   knobs.setAnisotropy(aniso);
 
   const router = new PointerRouter(canvas, cockpit.camera);
@@ -146,6 +152,10 @@ export function startApp(root: HTMLElement): void {
   router.add(status);
   router.add(library);
   for (const s of knobs.slots) router.add(s);
+  for (const t of controls.targets) router.add(t);
+  // Its bare face just stops the pointer; the knobs and buttons stand in
+  // front of it, so they're picked first.
+  router.add(controls);
   const companion = new Companion({ cockpit, cfg, canvas, store, runtime, knobs });
   cockpit.scene.add(companion.body.mesh);
   // It floats nearest the camera; picks off its body pass through its quad.
@@ -155,8 +165,6 @@ export function startApp(root: HTMLElement): void {
   const overlayBounds = (): { code: ScreenRect; portal: ScreenRect } => {
     const c = screenBounds(code.mesh, cockpit.camera, canvas);
     const p = screenBounds(portal.mesh, cockpit.camera, canvas);
-    // Keep clear of the knob ring too, not just the portal.
-    for (const s of knobs.slots) p.left = Math.min(p.left, screenBounds(s.face.mesh, cockpit.camera, canvas).left);
     return { code: c, portal: p };
   };
   const popover = new KnobPopover(store, (id) => {
@@ -300,6 +308,7 @@ export function startApp(root: HTMLElement): void {
     runtime.recompile(store.getState().project.source);
     for (const p of [rim, plot, code, status, library]) p.invalidate();
     for (const s of knobs.slots) s.face.invalidate();
+    controls.invalidate();
     toast('Graphics context restored.');
   });
 
@@ -330,6 +339,7 @@ export function startApp(root: HTMLElement): void {
     status.update();
     library.update();
     knobs.update();
+    controls.update();
     companion.update(now, dt);
     compositor.render();
   };
@@ -347,7 +357,7 @@ export function startApp(root: HTMLElement): void {
     arms.relayout(cfg);
     circuit.relayout(cfg);
     placeLights();
-    knobs.relayout(cfg);
+    controls.relayout(cfg);
     moldConsole();
     editor.position();
     compositor.markAll();
@@ -364,6 +374,12 @@ export function startApp(root: HTMLElement): void {
     __sv: {
       store, runtime, router, cockpit, companion, code, plot, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
       knobPoint: (slot: number) => screenPoint(knobs.slots[slot]!.anchor(), cockpit.camera, canvas),
+      controls,
+      /** Screen point of a console control, by id. */
+      controlPoint: (id: string) => {
+        const c = controls.controls.find((x) => x.control.id === id)!;
+        return screenPoint(c.group.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas);
+      },
       bounds: overlayBounds,
       /** Screen point of a source offset on the code monitor. */
       codePoint: (pos: number) => {
