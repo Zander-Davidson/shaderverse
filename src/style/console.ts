@@ -37,11 +37,17 @@ const BACKDROP_TEXEL = 0.06;
  */
 const FLATTEN = 0.85;
 /**
- * The console's broad faces: polished like the hardware on them, but a little
- * dimmer, so the pod behind the pilot mirrors crisply without competing with
- * the screens.
+ * The hull around the window: plain, dark and matte, so the window, the rig
+ * and the view outside carry the cockpit.
  */
-const CONSOLE_FINISH: THREE.MeshPhysicalMaterialParameters = { roughness: 0.06, envMapIntensity: 0.75, clearcoatRoughness: 0.04 };
+const CONSOLE_FINISH: THREE.MeshPhysicalMaterialParameters = {
+  color: '#2b3034',
+  metalness: 0.6,
+  roughness: 0.62,
+  envMapIntensity: 0.3,
+  clearcoat: 0,
+  iridescence: 0,
+};
 
 /** A panel's bezel: its outer silhouette and screen opening, in panel pixels. */
 export interface PanelMold {
@@ -304,7 +310,8 @@ export class ChromeConsole {
     const h = 2 * (cfg.fitHalfHeight + MARGIN);
     this.detail.geometry.dispose();
     this.detail.geometry = spherePatchGeometry(0, 0, w, h, cfg.radius, 0, Math.round(w / this.vertexSpacing), Math.round(h / this.vertexSpacing));
-    const s = 2 * COVER * cfg.fitHalfWidth;
+    // Out past the edges of the widest view.
+    const s = 2 * Math.max(COVER * cfg.fitHalfWidth, cfg.radius * 0.95);
     this.backdrop.geometry.dispose();
     this.backdrop.geometry = spherePatchGeometry(0, 0, s, s, cfg.radius, -0.004, 96, 96);
 

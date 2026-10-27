@@ -2,7 +2,8 @@
 
 *Part of the [Shaderverse design docs](README.md).*
 
-**Status:** designed, not yet built. Scheduled in the
+**Status:** built on the `hanging-monitors` branch, with the changes
+listed under [As built](#as-built). Scheduled in the
 [Roadmap](roadmap.md) as the v1.0.x cockpit rework.
 
 The cockpit opens up. The camera sits further back from the portal,
@@ -18,6 +19,47 @@ Nebuchadnezzar control room in *The Matrix*
 ([Reference interfaces](ui.md#reference-interfaces)), but keeps it
 sleek: precise machined arms and polished chrome bezels, not salvaged
 hardware.
+
+## As built
+
+Where the build departs from or settles the design below. Screenshots are
+in [screenshots/hanging-rig](screenshots/hanging-rig/README.md).
+
+-   **The window.** The round portal became a wide windscreen across the
+    front of the cockpit: the shader is the view outside, rendered in the
+    window's shape (the same pixel count per quality as before). Simple
+    strut-and-window construction, not the Falcon's rings and spokes: a
+    heavy frame and sill, four struts leaning toward an apex above the
+    view so the panes taper as they rise, a cross strut over the outer
+    panes only, and one diagonal brace on the right. The center pane is
+    the widest and nothing crosses the middle of the view. A faint haze,
+    edge shading and dust make the glass read. `cfg.portal` is now the
+    focal circle of that view: what leaning in frames and what the
+    companion and the overlay editor keep clear of. The window parallax
+    and the portal glow carry over.
+-   **Hull.** Plain, dark and matte. The molded collars, seams and the
+    circuit tubing that were tried are gone.
+-   **Arms.** They hang from an overhead rail that arcs just inside the
+    top of the default view (the sphere's ceiling is far above), each on
+    a rounded carriage. Joints are round: pivot hubs with chrome caps, a
+    lock collar and clamp knob, a round-cheeked yoke and a disc plate.
+-   **Monitors.** They hang partway between facing the eye and square to
+    the view (`monitorFacing`), so the wide lens stretches them less.
+    Convex glass reflects a calm room of its own (a few soft light
+    strips), with a faint vignette and scanlines. The readouts lay out
+    at 1.6–1.75× for legibility, the library in two columns.
+-   **Console.** Two arms, dropping behind the monitor columns. Knob slots
+    in the top row with a label and value strip under each. One row below:
+    PLAY, RESTART and LOW/MED/HIGH work (and left the status monitor),
+    CMP and RUN lamps follow state, the toggles and keys are decorative.
+    Hovering a knob lights its parameter in the code and the other way
+    round.
+-   **Lean-in.** Forward and down, as far as keeps the focal circle above
+    and the knob row with its labels along the bottom.
+
+Open: the window's proportions and strut layout, tuned by eye in
+`src/cockpit/layout.ts`; whether the console's decorative controls get
+real actions.
 
 ## What changes
 

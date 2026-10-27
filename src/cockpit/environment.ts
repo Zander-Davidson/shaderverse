@@ -185,3 +185,51 @@ export function cockpitEnvironment(): THREE.Scene {
   }
   return scene;
 }
+
+/**
+ * What the monitors' glass reflects: the pod without its detail, a dim warm
+ * room with a few broad, soft light strips, so the glass reads as glossy
+ * without busy greebles and lamps sliding over the screens.
+ */
+export function glassEnvironment(): THREE.Scene {
+  const scene = new THREE.Scene();
+  const shell = new THREE.Mesh(
+    new THREE.SphereGeometry(R, 48, 24),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      vertexShader: /* glsl */ `
+        varying vec3 vDir;
+        void main() {
+          vDir = normalize(position);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      // Darkest below, a faint warm wash above and behind the pilot.
+      fragmentShader: /* glsl */ `
+        varying vec3 vDir;
+        void main() {
+          float up = vDir.y * 0.5 + 0.5;
+          vec3 c = mix(vec3(0.012, 0.011, 0.01), vec3(0.07, 0.055, 0.04), smoothstep(0.3, 1.0, up));
+          c += vec3(0.03, 0.025, 0.02) * smoothstep(0.0, -1.0, vDir.z);
+          gl_FragColor = vec4(c, 1.0);
+        }`,
+    }),
+  );
+  scene.add(shell);
+  // Soft strips: one long one overhead behind the pilot, two short, dimmer
+  // ones off to the sides, none square to anything.
+  for (const [x, y, z, w, h, rz, i] of [
+    [0.6, 4.6, -3.2, 7, 1.1, 0.12, 0.55],
+    [-5.2, 1.2, -2.6, 1.0, 3.4, -0.2, 0.25],
+    [4.8, 2.4, -1.4, 0.8, 2.4, 0.3, 0.18],
+  ] as const) {
+    const strip = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe2c2').multiplyScalar(i), side: THREE.DoubleSide }),
+    );
+    strip.position.set(x, y, z);
+    strip.lookAt(0, 0, 0);
+    strip.rotateZ(rz);
+    scene.add(strip);
+  }
+  return scene;
+}

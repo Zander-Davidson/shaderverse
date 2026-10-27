@@ -8,7 +8,6 @@
 import { EditorSelection } from '@codemirror/state';
 import * as THREE from 'three';
 import { OVER_LAYER } from '../cockpit/compositor';
-import { wallToWorld } from './patch';
 import type { ViewUpdate } from '@codemirror/view';
 import type { LayoutConfig } from '../cockpit/layout';
 import { columnOf, offsetAt, TAB_SIZE } from '../editor/grid';
@@ -17,7 +16,8 @@ import type { ProjectStore } from '../project/store';
 import { functionAt, interactiveTokens, type FunctionHit } from '../source/functions';
 import { tokenize, type TokenType } from '../source/tokenizer';
 import { COLORS, KNOB_TINT, MONO } from '../theme';
-import { CanvasPanel, type PanelPointerEvent } from './panel';
+import { type PanelPointerEvent } from './panel';
+import { MonitorPanel } from './monitor';
 import { PanelShape } from './shape';
 import { drawScreenBackdrop, drawScreenGlare } from '../style/screen';
 
@@ -65,12 +65,24 @@ function expandTabs(text: string, col: number): string {
   return out;
 }
 
-export class CodePanel extends CanvasPanel {
+export class CodePanel extends MonitorPanel {
   private lines: Segment[][] = [];
   private linesFor = '';
   private hovering = false;
   /** The library function name under the pointer, underlined. */
   private fnHover: FunctionHit | null = null;
+  /** Called when the pointer comes onto or leaves a knob's parameter. */
+  onKnobParamHover: ((param: string | null) => void) | null = null;
+  private paramHover: string | null = null;
+  /** A knob's parameter to light up, because its knob is hovered. */
+  private linkedParam: string | null = null;
+
+  setLinkedParam(param: string | null) {
+    if (param === this.linkedParam) return;
+    this.linkedParam = param;
+    this.invalidate();
+  }
+
   /** Called when the hovered function name changes. */
   onFunctionHover: ((hit: FunctionHit | null) => void) | null = null;
   private charW = 16;
@@ -80,7 +92,6 @@ export class CodePanel extends CanvasPanel {
   private lastBlink = 0;
   private drag: { anchor: number } | null = null;
   private knobChip: { x: number; y: number; w: number; h: number } | null = null;
-  private radius: number;
   /**
    * The main caret is a small live mesh over the panel, so blinking doesn't
    * re-upload the (large) code texture.
@@ -97,9 +108,9 @@ export class CodePanel extends CanvasPanel {
     // Texture density chosen in the M4 legibility pass: ~1.35 texels per
     // screen pixel at 1600×900 and DPR 2.
     const pw = Math.round(cfg.code.w * PX_PER_UNIT);
-    super(cfg.code, pw, Math.round((pw * cfg.code.h) / cfg.code.w), cfg.radius, 0.01);
-    this.radius = cfg.radius;
+    super(cfg.code, pw, Math.round((pw * cfg.code.h) / cfg.code.w));
     this.reshape(cfg);
+    this.hang(cfg, cfg.code);
     this.caret = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ color: COLORS.accent, toneMapped: false, depthTest: false, transparent: true }),
@@ -136,9 +147,8 @@ export class CodePanel extends CanvasPanel {
   relayout(cfg: LayoutConfig) {
     this.pixelWidth = this.canvas.width = Math.round(cfg.code.w * PX_PER_UNIT);
     this.pixelHeight = this.canvas.height = Math.round((this.pixelWidth * cfg.code.h) / cfg.code.w);
-    this.rebuild(cfg.radius, cfg.code);
-    this.radius = cfg.radius;
     this.reshape(cfg);
+    this.hang(cfg, cfg.code);
     this.invalidate();
   }
 
@@ -201,11 +211,10 @@ export class CodePanel extends CanvasPanel {
     const px = this.ox + x;
     const py = this.oy + HEADER + PAD + (row + 0.5) * CODE_LINE_PX;
     const r = this.rect;
-    const wx = r.x + (px / this.pixelWidth - 0.5) * r.w;
-    const wy = r.y + (0.5 - py / this.pixelHeight) * r.h;
-    wallToWorld(wx, wy, this.radius, this.inset + 0.004, this.caret.position);
-    this.caret.lookAt(0, 0, 0);
-    this.caret.scale.set((3.5 / this.pixelWidth) * r.w, ((CODE_LINE_PX - 6) / this.pixelHeight) * r.h, 1);
+    const k = this.worldScale;
+    this.pointAt(px, py, 0.004, this.caret.position);
+    this.caret.quaternion.copy(this.rig.quaternion);
+    this.caret.scale.set((3.5 / this.pixelWidth) * r.w * k, ((CODE_LINE_PX - 6) / this.pixelHeight) * r.h * k, 1);
     this.caretPlaced = true;
   }
 
@@ -386,11 +395,12 @@ export class CodePanel extends CanvasPanel {
         if (endX < TEXT_X) continue;
         if (x > W) break;
         const isKnob = seg.type === 'identifier' && knobParams.has(seg.text);
+        const linked = isKnob && (seg.text === this.linkedParam || seg.text === this.paramHover);
         if (isKnob) {
-          ctx.fillStyle = `${KNOB_TINT}30`;
+          ctx.fillStyle = linked ? `${KNOB_TINT}70` : `${KNOB_TINT}30`;
           ctx.fillRect(x - 2, y + 4, w + 4, CODE_LINE_PX - 8);
         }
-        const glow = isKnob ? KNOB_TINT : seg.glow;
+        const glow = linked ? '#eafff8' : isKnob ? KNOB_TINT : seg.glow;
         if (seg.type === 'whitespace') continue;
         if (glow) {
           // Interactive: bright, with a glow, against the muted syntax colors.
@@ -579,6 +589,25 @@ export class CodePanel extends CanvasPanel {
     return lines.slice(0, n).reduce((at, l) => at + l.length + 1, 0) + ch;
   }
 
+  /** The knob parameter whose name is at source offset `pos`, if any. */
+  private knobParamAt(pos: number): string | null {
+    const text = this.text;
+    const word = /[A-Za-z0-9_]/;
+    let a = pos;
+    let b = pos;
+    while (a > 0 && word.test(text[a - 1]!)) a--;
+    while (b < text.length && word.test(text[b]!)) b++;
+    const name = text.slice(a, b);
+    return this.store.getState().project.knobs.some((k) => k.param === name) ? name : null;
+  }
+
+  private setParamHover(param: string | null) {
+    if (param === this.paramHover) return;
+    this.paramHover = param;
+    this.invalidate();
+    this.onKnobParamHover?.(param);
+  }
+
   private setFunctionHover(hit: FunctionHit | null) {
     if (hit?.from === this.fnHover?.from && hit?.fn === this.fnHover?.fn) return;
     this.fnHover = hit;
@@ -595,6 +624,7 @@ export class CodePanel extends CanvasPanel {
       }
       const pos = h ? this.charAt(e.x, e.y) : null;
       this.setFunctionHover(pos === null ? null : functionAt(this.text, pos));
+      this.setParamHover(pos === null ? null : this.knobParamAt(pos));
       return;
     }
     if (e.kind === 'wheel') {

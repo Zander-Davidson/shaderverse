@@ -1,6 +1,7 @@
-// Cockpit geometry and layout, in "wall units": arc length along the sphere
-// wall, measured from the point straight ahead of the camera. Tuned by eye
-// with the dev panel (src/dev/tuning.ts) and then written here.
+// Cockpit geometry and layout. The portal and knobs are placed in "wall
+// units": arc length along the sphere wall, measured from the point straight
+// ahead of the camera. The monitors hang in rig space instead (src/cockpit/rig.ts).
+// Tuned by eye with the dev panel (src/dev/tuning.ts) and then written here.
 
 export interface Rect {
   x: number;
@@ -9,26 +10,87 @@ export interface Rect {
   h: number;
 }
 
+/**
+ * A piece hung on the rig. Its panel size, in panel units, sets the texture's
+ * resolution and aspect; `scale` turns panel units into world units.
+ */
+export interface HungLayout {
+  w: number;
+  h: number;
+  /** Center of its face in rig space: eye-relative, x right, y up, z forward. */
+  at: [number, number, number];
+  scale: number;
+  /** Posed turn beyond facing the eye, in degrees (see monitorFrame). */
+  yaw: number;
+  pitch: number;
+  roll: number;
+}
+
+/** An arm: where its carriage sits along the rail (rig x), and its elbow in rig space. */
+export interface ArmLayout {
+  mount: number;
+  elbow: [number, number, number];
+}
+
+export interface MonitorLayout extends HungLayout {
+  arm: ArmLayout;
+}
+
+/**
+ * The hanging control console: a tray of knobs, buttons and keys below the
+ * portal. Its arms meet its back at `attach` (panel units, from its center).
+ */
+export interface ConsoleLayout extends HungLayout {
+  arms: (ArmLayout & { attach: [number, number] })[];
+}
+
 export interface LayoutConfig {
   /** Sphere radius. Larger is flatter. */
   radius: number;
   /** Camera distance from the wall. */
   eyeDistance: number;
-  /** Half extents (wall units) the camera keeps in view. */
+  /** Half extents (wall units) the camera keeps in view, as well as every monitor. */
   fitHalfWidth: number;
   fitHalfHeight: number;
+  /**
+   * The focal circle of the view out the window: where the shader's center
+   * shows, what leaning in frames and what the companion keeps clear of.
+   */
   portal: { x: number; y: number; size: number };
-  /** Gap between the portal's bezel and the right-hand panels that wrap it. */
-  clearance: number;
-  /** Corner radius of panel silhouettes, in wall units. */
+  /**
+   * The cockpit window, in wall units: a windscreen wider at its sill than at
+   * its head, divided by struts that lean toward an apex above the view.
+   */
+  window: {
+    sill: number;
+    head: number;
+    /** Left and right edges at the sill, and at the head. */
+    sillX: [number, number];
+    headX: [number, number];
+    /** Where the struts lean to. */
+    apex: [number, number];
+    /** Where the struts meet the sill, left to right. */
+    struts: number[];
+    /** Height of the cross strut over the outer panes. */
+    transom: number;
+  };
+  /**
+   * How square the monitors hang to the view: 0 faces each one at the eye
+   * (the wide lens then stretches them like walls running toward the portal),
+   * 1 hangs them flat, parallel to the screen.
+   */
+  monitorFacing: number;
+  /** The overhead rail the arms hang from: height, depth at its middle, half length, and how far its ends curve toward the viewer. */
+  rail: { y: number; z: number; halfWidth: number; bow: number };
+  /** Corner radius of panel silhouettes, in panel units. */
   cornerRadius: number;
-  /** Knobs sit on an arc around the portal's left side, top to bottom. */
-  knobRing: { radius: number; size: number; startDeg: number; stepDeg: number };
+
   /** Function plot, above the code. */
-  plot: Rect;
-  code: Rect;
-  status: Rect;
-  library: Rect;
+  plot: MonitorLayout;
+  code: MonitorLayout;
+  status: MonitorLayout;
+  library: MonitorLayout;
+  console: ConsoleLayout;
   companion: CompanionLayout;
 }
 
@@ -51,37 +113,67 @@ export interface CompanionLayout {
 }
 
 export const DEFAULT_LAYOUT: LayoutConfig = {
-  radius: 22,
-  eyeDistance: 6,
-  fitHalfWidth: 7.45,
-  fitHalfHeight: 4.15,
-  portal: { x: 2.2, y: 0.15, size: 4.1 },
-  clearance: 0.14,
+  radius: 36,
+  eyeDistance: 10,
+  fitHalfWidth: 5.5,
+  fitHalfHeight: 5.6,
+  portal: { x: 0, y: 0.8, size: 6.8 },
+  window: {
+    sill: -3.6,
+    head: 6.1,
+    sillX: [-12.6, 13.0],
+    headX: [-9.6, 10.2],
+    apex: [-1.4, 25],
+    struts: [-8.4, -3.5, 3.2, 8.7],
+    transom: 3.1,
+  },
+  monitorFacing: 0.55,
+  rail: { y: 3.9, z: 5.6, halfWidth: 5.6, bow: 1.0 },
   cornerRadius: 0.38,
-  // Nearly touching: neighbors are ~0.93 apart for 0.9-wide knobs.
-  knobRing: { radius: 2.9, size: 0.9, startDeg: 115, stepDeg: 18.5 },
-  // Room between the source and the knobs for the knob tubing.
-  plot: { x: -4.85, y: 2.75, w: 4.9, h: 2.6 },
-  code: { x: -4.85, y: -1.35, w: 4.9, h: 5.4 },
-  status: { x: 5.6, y: 2.06, w: 3.3, h: 3.88 },
-  library: { x: 5.6, y: -2.06, w: 3.3, h: 3.88 },
+  // Source and plot on the left, readouts on the right, close to the camera
+  // and framing the portal. Each is posed a little differently, as if the
+  // pilot swung it into place. The lower monitors' arms reach up behind the
+  // upper ones; no two elbows bend the same way.
+  plot: {
+    w: 4.9, h: 2.6, at: [-3.35, 1.45, 4.0], scale: 0.55, yaw: -4, pitch: 3, roll: 1.5,
+    arm: { mount: -0.9, elbow: [-1.8, 2.65, 5.35] },
+  },
+  code: {
+    w: 4.9, h: 5.4, at: [-3.3, -0.95, 3.8], scale: 0.55, yaw: 3, pitch: 0, roll: -0.8,
+    arm: { mount: -4.4, elbow: [-4.95, 0.55, 5.6] },
+  },
+  status: {
+    w: 4.0, h: 3.88, at: [3.15, 1.15, 3.9], scale: 0.55, yaw: -2, pitch: 2, roll: -1.2,
+    arm: { mount: 2.4, elbow: [4.25, 2.85, 5.15] },
+  },
+  library: {
+    w: 4.0, h: 3.88, at: [3.2, -1.2, 3.7], scale: 0.55, yaw: -5, pitch: -2, roll: 0.7,
+    arm: { mount: 4.7, elbow: [5.0, -0.25, 5.7] },
+  },
+  // Below the portal, between the monitor columns, tipped back like a
+  // keyboard tray. Its arms drop behind the monitor columns, clear of the
+  // portal, and reach in to its back edge.
+  console: {
+    w: 7.2, h: 2.7, at: [0.07, -1.76, 3.42], scale: 0.43, yaw: 1.5, pitch: -38, roll: 0.6,
+    arms: [
+      { mount: -3.2, elbow: [-2.8, -1.1, 5.3], attach: [-2.6, 0.7] },
+      { mount: 3.35, elbow: [2.9, -1.35, 5.25], attach: [2.7, 0.6] },
+    ],
+  },
   companion: {
     size: 1.1,
     standoff: 0.3,
     margin: 0.12,
     perches: {
-      // Overhead, between the knob arc and the readouts; else the low crook
-      // between the code and the bottom of the arc.
-      neutral: [{ x: 2.5, y: 3.8 }, { x: -0.5, y: -3.7 }, { x: -1.0, y: 3.9 }],
-      // On the turned-to side of the portal: between the source and the
-      // knob arc, or between the portal and the library, low where the
-      // tubing and bezel leave room; else up beside the plot or the status.
-      left: [{ x: -1.6, y: -3.1 }, { x: -1.75, y: 3.05 }],
-      right: [{ x: 3.1, y: -2.9 }, { x: 3.1, y: 3.05 }],
-      // Leaned in there is little room (it squeezes smaller to fit): the
-      // nooks beside the bezel's top and bottom right, and beyond the top of
-      // the knob arc.
-      lean: [{ x: 3.3, y: 2.8 }, { x: -1.8, y: 2.3 }, { x: 3.4, y: -2.4 }],
+      // Overhead, beside the top of the portal; else under the knob row.
+      neutral: [{ x: 3.5, y: 5.0 }, { x: -2.5, y: 5.0 }, { x: 2.0, y: -6.5 }],
+      // On the turned-to side, up high: the turn leaves no room lower down
+      // between the near monitors and the portal, and the plot's arm fills
+      // the gap above it on the left.
+      left: [{ x: -5.5, y: 6.0 }, { x: -6.5, y: 6.0 }],
+      right: [{ x: 3.5, y: 5.5 }, { x: -4.5, y: 3.5 }],
+      // Leaned in: beside the bezel, left or right of the portal.
+      lean: [{ x: 6.0, y: 1.0 }, { x: -6.0, y: 1.0 }, { x: 6.0, y: -3.0 }],
     },
   },
 };
@@ -90,12 +182,3 @@ export const layout: LayoutConfig = structuredClone(DEFAULT_LAYOUT);
 
 /** Outer radius of the portal's chrome bezel, in wall units. */
 export const bezelRadius = (cfg: LayoutConfig) => (cfg.portal.size / 2) * 1.15 + 0.04;
-
-/** Wall coordinates of knob slot `i`, down the arc on the portal's left. */
-export function knobSlotPosition(cfg: LayoutConfig, i: number, _count: number): { x: number; y: number } {
-  const a = ((cfg.knobRing.startDeg + cfg.knobRing.stepDeg * i) * Math.PI) / 180;
-  return {
-    x: cfg.portal.x + Math.cos(a) * cfg.knobRing.radius,
-    y: cfg.portal.y + Math.sin(a) * cfg.knobRing.radius,
-  };
-}

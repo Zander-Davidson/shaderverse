@@ -29,9 +29,8 @@ export async function sampleTarget(page: Page, x = 0.5, y = 0.5, size = 24): Pro
   return page.evaluate(
     ({ x, y, size }) => {
       const { renderer, runtime } = (window as any).__sv;
-      const s = runtime.size;
       const buf = new Uint8Array(size * size * 4);
-      renderer.readRenderTargetPixels(runtime.target, Math.floor(x * s - size / 2), Math.floor(y * s - size / 2), size, size, buf);
+      renderer.readRenderTargetPixels(runtime.target, Math.floor(x * runtime.width - size / 2), Math.floor(y * runtime.height - size / 2), size, size, buf);
       const sum = [0, 0, 0];
       for (let i = 0; i < buf.length; i += 4) for (let c = 0; c < 3; c++) sum[c]! += buf[i + c]!;
       return sum.map((v) => v / (size * size));

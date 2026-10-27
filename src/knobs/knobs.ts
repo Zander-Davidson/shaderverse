@@ -1,19 +1,18 @@
-// Knob slots around the portal. Each slot is a canvas face (ring, label,
-// value) with a 3D cap in front of it. Values go to the store, and from there
-// to uniforms only: turning a knob never recompiles.
+// Knob slots in the top row of the hanging console. Each slot is a canvas
+// face (dish, ring and a label strip beneath) with a 3D cap in front of it,
+// both in the console's own frame. Values go to the store, and from there to
+// uniforms only: turning a knob never recompiles.
 
 import * as THREE from 'three';
-import { chromeMaterial, type RingMold } from '../style/console';
+import { chromeMaterial } from '../style/console';
 import { physicalMaterial } from '../style/quality';
-import { knobSlotPosition, type LayoutConfig, type Rect } from '../cockpit/layout';
 import { CanvasPanel, redrawListenerRef, type PanelPointerEvent, type PointerTarget } from '../panels/panel';
+import { KNOB_FACE, KNOB_LIFT, KNOB_STRIP, knobLocal } from '../console/plan';
 
 const redrawListener = { call: (o: THREE.Object3D) => redrawListenerRef()?.(o) };
-import { wallToWorld } from '../panels/patch';
 import { KNOB_SLOTS, type KnobRecord } from '../project/schema';
 import type { ProjectStore } from '../project/store';
 import { COLORS, KNOB_TINT, MONO } from '../theme';
-import { KnobTubes } from './tubes';
 
 /** Screen pixels of vertical drag for the full range; fine control divides by 10. */
 export const DRAG_PX_FULL_RANGE = 240;
@@ -33,82 +32,36 @@ export function formatValue(k: Pick<KnobRecord, 'type'>, v: number): string {
   return a >= 100 ? v.toFixed(1) : a >= 10 ? v.toFixed(2) : v.toFixed(3);
 }
 
-/** Radius of a knob's recessed dish, as a fraction of the slot size. */
+/** Radius of a knob's recessed dish, as a fraction of the face's width. */
 const DISH = (192 - 14) / 384;
-
-function faceRect(cfg: LayoutConfig, slot: number): Rect {
-  const p = knobSlotPosition(cfg, slot, KNOB_SLOTS);
-  const w = cfg.knobRing.size;
-  return { x: p.x, y: p.y, w, h: w };
-}
-
-/**
- * Draws `text` along a circle of radius `r` around (cx, cy), centered on the
- * top or bottom of the circle and always reading left to right, upright.
- */
-export function arcText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  cx: number,
-  cy: number,
-  r: number,
-  side: 'top' | 'bottom',
-  maxSweep: number,
-  font: (px: number) => string,
-  sizes: number[],
-): void {
-  // Pick the largest size that fits the sweep, then truncate if still too long.
-  let shown = text;
-  let px = sizes[sizes.length - 1]!;
-  for (const s of sizes) {
-    ctx.font = font(s);
-    if (ctx.measureText(text).width / r <= maxSweep) {
-      px = s;
-      break;
-    }
-  }
-  ctx.font = font(px);
-  while (shown.length > 1 && ctx.measureText(shown).width / r > maxSweep) shown = `${shown.slice(0, -2)}…`;
-
-  const widths = [...shown].map((ch) => ctx.measureText(ch).width);
-  const sweep = widths.reduce((a, b) => a + b, 0) / r;
-  const dir = side === 'top' ? 1 : -1;
-  // Top text runs clockwise from the left; bottom text runs counterclockwise.
-  let a = (side === 'top' ? -Math.PI / 2 : Math.PI / 2) - (dir * sweep) / 2;
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  [...shown].forEach((ch, i) => {
-    const half = widths[i]! / 2 / r;
-    a += dir * half;
-    ctx.save();
-    ctx.translate(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-    ctx.rotate(side === 'top' ? a + Math.PI / 2 : a - Math.PI / 2);
-    ctx.fillText(ch, 0, 0);
-    ctx.restore();
-    a += dir * half;
-  });
-  ctx.restore();
-}
+/** Face texture width; its height adds the label strip. */
+const FACE_PX = 384;
 
 class KnobFace extends CanvasPanel {
   knob: KnobRecord | null = null;
   hover = false;
   active = false;
+  /** Lit because its parameter is hovered in the code. */
+  linked = false;
 
-  constructor(cfg: LayoutConfig, readonly slot: number) {
-    // In front of the portal rim, so labels are never covered.
-    super(faceRect(cfg, slot), 384, 384, cfg.radius, 0.025);
+  constructor(readonly slot: number) {
+    super({ x: 0, y: 0, w: KNOB_FACE, h: KNOB_FACE + KNOB_STRIP }, FACE_PX, Math.round((FACE_PX * (KNOB_FACE + KNOB_STRIP)) / KNOB_FACE), 0, 0);
+    const [x, y] = knobLocal(slot);
+    // The dish centered on the slot, the strip hanging below it.
+    this.mesh.position.set(x, y - KNOB_STRIP / 2, 0.004);
+  }
+
+  protected override geometryFor(): THREE.BufferGeometry {
+    return new THREE.PlaneGeometry(this.rect.w, this.rect.h);
   }
 
   protected draw(ctx: CanvasRenderingContext2D): void {
     const W = this.pixelWidth;
     const H = this.pixelHeight;
     const cx = W / 2;
-    const cy = H / 2;
-    // Ring just outside the cap; labels wrap around outside the ticks.
+    const cy = W / 2;
+    // Ring just outside the cap.
     const R = W * 0.3;
-    const TEXT_R = W * 0.415;
     const tint = KNOB_TINT;
     const k = this.knob;
     ctx.clearRect(0, 0, W, H);
@@ -126,7 +79,7 @@ class KnobFace extends CanvasPanel {
     ctx.fill();
     ctx.beginPath();
     ctx.arc(cx, cy, rd - 6, 0, Math.PI * 2);
-    if (k && (this.hover || this.active)) {
+    if (k && (this.hover || this.active || this.linked)) {
       ctx.lineWidth = 3;
       ctx.strokeStyle = `${tint}aa`;
       ctx.stroke();
@@ -149,10 +102,24 @@ class KnobFace extends CanvasPanel {
       ctx.stroke();
     }
 
+    // The label strip: a dark engraved plate under the dish.
+    const sy = W + 4;
+    const sh = H - W - 12;
+    ctx.beginPath();
+    ctx.roundRect(10, sy, W - 20, sh, 14);
+    ctx.fillStyle = '#060a0b';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = k && (this.hover || this.active || this.linked) ? `${tint}aa` : '#1d2a30';
+    ctx.stroke();
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (!k) {
-      // An empty slot: bare chrome over the well, no readouts.
+      // An empty slot: bare chrome over the well, a blank strip.
+      ctx.fillStyle = '#26343b';
+      ctx.font = `600 30px ${MONO}`;
+      ctx.fillText(`— ${this.slot + 1} —`, cx, sy + sh / 2);
       return;
     }
 
@@ -170,11 +137,20 @@ class KnobFace extends CanvasPanel {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    ctx.fillStyle = tint;
-    arcText(ctx, k.label.toUpperCase(), cx, cy, TEXT_R, 'top', Math.PI * 0.85, (px) => `700 ${px}px ${MONO}`, [36, 31, 26, 23]);
+    // Label above the value, each shrunk to fit the strip.
+    const fit = (text: string, weight: number, sizes: number[]) => {
+      for (const px of sizes) {
+        ctx.font = `${weight} ${px}px ${MONO}`;
+        if (ctx.measureText(text).width <= W - 44) return text;
+      }
+      let t = text;
+      while (t.length > 1 && ctx.measureText(t).width > W - 44) t = `${t.slice(0, -2)}…`;
+      return t;
+    };
+    ctx.fillStyle = this.linked ? '#ffffff' : tint;
+    ctx.fillText(fit(k.label.toUpperCase(), 700, [58, 50, 43, 37, 32]), cx, sy + sh * 0.3);
     ctx.fillStyle = this.active ? '#ffffff' : COLORS.text;
-    // The value sits in the gap at the bottom of the ring.
-    arcText(ctx, formatValue(k, k.value), cx, cy, TEXT_R, 'bottom', Math.PI * 0.45, (px) => `600 ${px}px ${MONO}`, [36, 31, 26]);
+    ctx.fillText(fit(formatValue(k, k.value), 600, [54, 46, 40]), cx, sy + sh * 0.73);
   }
 }
 
@@ -218,12 +194,12 @@ class KnobCap {
     this.group.add(this.pivot);
   }
 
-  place(cfg: LayoutConfig, slot: number) {
-    const p = knobSlotPosition(cfg, slot, KNOB_SLOTS);
-    wallToWorld(p.x, p.y, cfg.radius, 0.09, this.group.position);
-    this.group.lookAt(0, 0, 0);
+  /** On the console's face, facing out of it (local +z). */
+  place(slot: number) {
+    const [x, y] = knobLocal(slot);
+    this.group.position.set(x, y, KNOB_LIFT);
     // Cap geometry is modeled for a 0.98-wide face.
-    this.group.scale.setScalar(cfg.knobRing.size / 0.98);
+    this.group.scale.setScalar(KNOB_FACE / 0.98);
   }
 
   /** Empty slots keep the chrome cap but lose the angle notch. */
@@ -239,14 +215,16 @@ export class KnobSlot implements PointerTarget {
   private rawValue: number | null = null;
   private clickTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Called when the pointer comes onto or leaves an assigned knob. */
+  onHover: ((knob: KnobRecord | null) => void) | null = null;
+
   constructor(
-    cfg: LayoutConfig,
     readonly slot: number,
     private readonly store: ProjectStore,
   ) {
-    this.face = new KnobFace(cfg, slot);
+    this.face = new KnobFace(slot);
     this.cap = new KnobCap(KNOB_TINT);
-    this.cap.place(cfg, slot);
+    this.cap.place(slot);
     this.cap.setAssigned(false);
   }
 
@@ -268,12 +246,14 @@ export class KnobSlot implements PointerTarget {
 
   /** World anchor for the popover. */
   anchor(): THREE.Vector3 {
-    return this.cap.group.position;
+    return this.cap.group.getWorldPosition(new THREE.Vector3());
   }
 
-  relayout(cfg: LayoutConfig) {
-    this.face.rebuild(cfg.radius, faceRect(cfg, this.slot));
-    this.cap.place(cfg, this.slot);
+  /** Lights the slot because its parameter is hovered in the code. */
+  setLinked(on: boolean) {
+    if (on === this.face.linked) return;
+    this.face.linked = on;
+    this.face.invalidate();
   }
 
   setKnob(k: KnobRecord | null) {
@@ -306,6 +286,7 @@ export class KnobSlot implements PointerTarget {
       if (h !== this.face.hover) {
         this.face.hover = h;
         this.face.invalidate();
+        this.onHover?.(h ? k : null);
       }
       return;
     }
@@ -360,13 +341,15 @@ export class KnobSlot implements PointerTarget {
 
 export class KnobBank {
   readonly slots: KnobSlot[] = [];
+  /** The faces and caps, in the console's frame. */
   readonly group = new THREE.Group();
-  readonly tubes: KnobTubes;
+  /** Called when the pointer comes onto or leaves an assigned knob. */
+  onHover: ((knob: KnobRecord | null) => void) | null = null;
 
-  constructor(cfg: LayoutConfig, store: ProjectStore) {
-    this.tubes = new KnobTubes(cfg);
+  constructor(store: ProjectStore) {
     for (let i = 0; i < KNOB_SLOTS; i++) {
-      const s = new KnobSlot(cfg, i, store);
+      const s = new KnobSlot(i, store);
+      s.onHover = (k) => this.onHover?.(k);
       this.slots.push(s);
       this.group.add(s.face.mesh, s.cap.group);
     }
@@ -374,40 +357,22 @@ export class KnobBank {
       const knobs = store.getState().project.knobs;
       for (const s of this.slots) {
         const k = knobs.find((x) => x.slot === s.slot) ?? null;
-        const was = !!s.knob;
         s.setKnob(k);
-        if (was !== !!k) {
-          this.tubes.setActive(s.slot, !!k, KNOB_TINT);
-          const g = this.tubes.tubeGroup(s.slot);
-          if (g) redrawListener.call(g);
-        }
       }
     };
-    for (let i = 0; i < KNOB_SLOTS; i++) this.tubes.setActive(i, false, KNOB_TINT);
     sync();
     store.subscribe((st, prev) => {
       if (st.project.knobs !== prev.project.knobs) sync();
     });
   }
 
-  relayout(cfg: LayoutConfig) {
-    for (const s of this.slots) s.relayout(cfg);
-    this.tubes.relayout(cfg);
-    for (const s of this.slots) this.tubes.setActive(s.slot, !!s.knob, KNOB_TINT);
+  /** Lights the slot whose knob drives `param`, and no other. */
+  highlight(param: string | null) {
+    for (const s of this.slots) s.setLinked(!!param && s.knob?.param === param);
   }
 
-  /** Collars for the console to mold around each slot's dish. */
-  molds(cfg: LayoutConfig): RingMold[] {
-    const size = cfg.knobRing.size;
-    return this.slots.map((s) => {
-      const p = knobSlotPosition(cfg, s.slot, KNOB_SLOTS);
-      return { x: p.x, y: p.y, outer: size / 2 + 0.09, opening: size * DISH };
-    });
-  }
-
-  update(time = 0) {
+  update() {
     for (const s of this.slots) s.face.update();
-    this.tubes.update(time);
   }
 
   setAnisotropy(n: number) {

@@ -7,6 +7,11 @@ import { layout, type LayoutConfig } from './cockpit/layout';
 import { Companion } from './companion/companion';
 import { Compositor } from './cockpit/compositor';
 import { Cockpit } from './cockpit/scene';
+import { Arms } from './cockpit/arms';
+import { CockpitWindow } from './cockpit/window';
+import { ConsolePanel } from './console/console';
+import { PortalGlow } from './cockpit/glow';
+import { wallToWorld } from './panels/patch';
 import { KnobBank } from './knobs/knobs';
 import { showBoot } from './overlays/boot';
 import { SceneEditor } from './editor/sceneEditor';
@@ -15,11 +20,11 @@ import { HelpOverlay, toast } from './overlays/help';
 import { KnobPopover } from './overlays/popover';
 import { screenBounds, screenPoint, type ScreenRect } from './panels/bounds';
 import { CodePanel } from './panels/code';
-import { wallToWorld } from './panels/patch';
 import { onPanelRedraw } from './panels/panel';
 import { PlotPanel } from './panels/plot';
+import { setGlassEnvironment } from './panels/monitor';
 import { PointerRouter } from './panels/pointer';
-import { PortalPanel, PortalRim, portalMold } from './panels/portal';
+import { PortalPanel } from './panels/portal';
 import { LibraryPanel, StatusPanel, type LibraryActions } from './panels/status';
 import {
   autosave,
@@ -69,7 +74,6 @@ export function startApp(root: HTMLElement): void {
   cockpit.setEnvironment(renderer);
   cockpit.fit(window.innerWidth / window.innerHeight);
   const portal = new PortalPanel(runtime, cfg);
-  const rim = new PortalRim(cfg);
   // The curved panel is the editor; ?editor=overlay restores the flat window.
   const useOverlay = new URLSearchParams(location.search).get('editor') === 'overlay';
   const editor: SceneEditor | EditorOverlay = useOverlay
@@ -112,19 +116,33 @@ export function startApp(root: HTMLElement): void {
     toggleHelp: () => helpOverlay.toggle(),
   };
   const library = new LibraryPanel(cfg, store, libraryActions);
-  const knobs = new KnobBank(cfg, store);
+  const knobs = new KnobBank(store);
+  // The hanging control console: the knobs, playback and quality buttons.
+  const controls = new ConsolePanel(cfg, store, knobs);
+  // Knobs and their parameters in the code light each other up.
+  knobs.onHover = (k) => code.setLinkedParam(k?.param ?? null);
+  code.onKnobParamHover = (param) => knobs.highlight(param);
+  setGlassEnvironment(cockpit.glassEnvironment);
 
-  cockpit.scene.add(code.caret, portal.hole, knobs.tubes.group, rim.mesh, portal.mesh, plot.mesh, code.mesh, status.mesh, library.mesh, knobs.group);
-  // Bezels, collars and tubing, molded into the console as one piece.
+  const arms = new Arms(cfg);
+  const cockpitWindow = new CockpitWindow(cfg);
+  // The portal lights the back of the rig in the shader's colors. (It sits
+  // behind the screens, so their convex glass never shows it as a glint.)
+  const glow = new PortalGlow(renderer, runtime, !LOW_GFX);
+  const placeLights = () => wallToWorld(cfg.portal.x, cfg.portal.y, cfg.radius, 0.8, glow.light.position);
+  placeLights();
+  cockpit.scene.add(glow.light);
+  cockpit.scene.add(code.caret, portal.hole, portal.mesh, plot.rig, code.rig, status.rig, library.rig, controls.rig, arms.group, cockpitWindow.group);
+  // The shell around the window: plain, with nothing molded into it.
   const moldConsole = () =>
     cockpit.console.mold(renderer, cfg, {
-      panels: [plot, code, status, library].flatMap((p) => p.mold() ?? []),
-      rings: [portalMold(cfg), ...knobs.molds(cfg)],
-      pipes: knobs.tubes.molds,
+      panels: [],
+      rings: [],
+      pipes: [],
     });
   moldConsole();
   const aniso = renderer.capabilities.getMaxAnisotropy();
-  for (const p of [rim, plot, code, status, library]) p.setAnisotropy(aniso);
+  for (const p of [plot, code, status, library, controls]) p.setAnisotropy(aniso);
   knobs.setAnisotropy(aniso);
 
   const router = new PointerRouter(canvas, cockpit.camera);
@@ -133,6 +151,10 @@ export function startApp(root: HTMLElement): void {
   router.add(status);
   router.add(library);
   for (const s of knobs.slots) router.add(s);
+  for (const t of controls.targets) router.add(t);
+  // Its bare face just stops the pointer; the knobs and buttons stand in
+  // front of it, so they're picked first.
+  router.add(controls);
   const companion = new Companion({ cockpit, cfg, canvas, store, runtime, knobs });
   cockpit.scene.add(companion.body.mesh);
   // It floats nearest the camera; picks off its body pass through its quad.
@@ -141,9 +163,18 @@ export function startApp(root: HTMLElement): void {
   // Overlays
   const overlayBounds = (): { code: ScreenRect; portal: ScreenRect } => {
     const c = screenBounds(code.mesh, cockpit.camera, canvas);
-    const p = screenBounds(portal.mesh, cockpit.camera, canvas);
-    // Keep clear of the knob ring too, not just the portal.
-    for (const s of knobs.slots) p.left = Math.min(p.left, screenBounds(s.face.mesh, cockpit.camera, canvas).left);
+    // The window's focal circle, where the shader's center shows.
+    const r = canvas.getBoundingClientRect();
+    const p: ScreenRect = { left: r.right, top: r.bottom, right: r.left, bottom: r.top };
+    const half = cfg.portal.size / 2;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const s = screenPoint(wallToWorld(cfg.portal.x + Math.cos(a) * half, cfg.portal.y + Math.sin(a) * half, cfg.radius, 0), cockpit.camera, canvas);
+      p.left = Math.min(p.left, s.x);
+      p.right = Math.max(p.right, s.x);
+      p.top = Math.min(p.top, s.y);
+      p.bottom = Math.max(p.bottom, s.y);
+    }
     return { code: c, portal: p };
   };
   const popover = new KnobPopover(store, (id) => {
@@ -282,10 +313,12 @@ export function startApp(root: HTMLElement): void {
     compositor.resize();
     // Render targets were lost with the context: bake the reflections and console again.
     cockpit.setEnvironment(renderer);
+    setGlassEnvironment(cockpit.glassEnvironment);
     moldConsole();
     runtime.recompile(store.getState().project.source);
-    for (const p of [rim, plot, code, status, library]) p.invalidate();
+    for (const p of [plot, code, status, library]) p.invalidate();
     for (const s of knobs.slots) s.face.invalidate();
+    controls.invalidate();
     toast('Graphics context restored.');
   });
 
@@ -308,12 +341,14 @@ export function startApp(root: HTMLElement): void {
     }
     runtime.setViewZoom(cockpit.viewZoom);
     runtime.render(dt);
-    rim.update();
+    // A new glow color relights the whole cached cockpit.
+    if (glow.update(dt)) compositor.markAll();
     plot.update();
     code.update();
     status.update();
     library.update();
-    knobs.update(now / 1000);
+    knobs.update();
+    controls.update();
     companion.update(now, dt);
     compositor.render();
   };
@@ -323,12 +358,14 @@ export function startApp(root: HTMLElement): void {
     cockpit.relayout(cfg);
     cockpit.fit(window.innerWidth / window.innerHeight);
     portal.rebuild(cfg);
-    rim.relayout(cfg);
     plot.relayout(cfg);
     code.relayout(cfg);
     status.relayout(cfg);
     library.relayout(cfg);
-    knobs.relayout(cfg);
+    arms.relayout(cfg);
+    cockpitWindow.relayout(cfg);
+    placeLights();
+    controls.relayout(cfg);
     moldConsole();
     editor.position();
     compositor.markAll();
@@ -345,14 +382,17 @@ export function startApp(root: HTMLElement): void {
     __sv: {
       store, runtime, router, cockpit, companion, code, plot, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
       knobPoint: (slot: number) => screenPoint(knobs.slots[slot]!.anchor(), cockpit.camera, canvas),
+      controls,
+      /** Screen point of a console control, by id. */
+      controlPoint: (id: string) => {
+        const c = controls.controls.find((x) => x.control.id === id)!;
+        return screenPoint(c.group.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas);
+      },
       bounds: overlayBounds,
-      /** Screen point of a source offset on the curved code panel. */
+      /** Screen point of a source offset on the code monitor. */
       codePoint: (pos: number) => {
         const px = code.pixelOf(pos);
-        const r = code.rect;
-        const wx = r.x + (px.x / code.pixelWidth - 0.5) * r.w;
-        const wy = r.y + (0.5 - px.y / code.pixelHeight) * r.h;
-        return screenPoint(wallToWorld(wx, wy, cfg.radius, 0.01), cockpit.camera, canvas);
+        return screenPoint(code.pointAt(px.x, px.y), cockpit.camera, canvas);
       },
     },
   });
