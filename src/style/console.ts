@@ -37,11 +37,17 @@ const BACKDROP_TEXEL = 0.06;
  */
 const FLATTEN = 0.85;
 /**
- * The console's broad faces: polished like the hardware on them, but a little
- * dimmer, so the pod behind the pilot mirrors crisply without competing with
- * the screens.
+ * The shell behind the rig: darker and less mirror-like than the monitors'
+ * chrome bezels, so the rig and the portal stand out against it.
  */
-const CONSOLE_FINISH: THREE.MeshPhysicalMaterialParameters = { roughness: 0.06, envMapIntensity: 0.75, clearcoatRoughness: 0.04 };
+const CONSOLE_FINISH: THREE.MeshPhysicalMaterialParameters = {
+  color: '#59646a',
+  roughness: 0.22,
+  envMapIntensity: 0.4,
+  clearcoat: 0.25,
+  clearcoatRoughness: 0.15,
+  iridescence: 0.1,
+};
 
 /** A panel's bezel: its outer silhouette and screen opening, in panel pixels. */
 export interface PanelMold {
@@ -163,6 +169,15 @@ float lip(float d, float width) {
   return mix(-0.01, height, sin(t * 1.5707963));
 }
 
+// Panel seams on the shell: shallow grooves between hull plates, so it reads
+// as a surface at a distance.
+const vec2 PLATE = vec2(4.4, 2.9);
+float seams(vec2 p) {
+  vec2 q = p / PLATE + 0.5;
+  vec2 d = (0.5 - abs(fract(q) - 0.5)) * PLATE;
+  return -0.03 * (1.0 - smoothstep(0.02, 0.09, min(d.x, d.y)));
+}
+
 float segDist(vec2 p, vec4 s) {
   vec2 ab = s.zw - s.xy;
   float t = clamp(dot(p - s.xy, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
@@ -193,6 +208,7 @@ float field(vec2 p) {
     cap = min(cap, lip(d - rings[i].w, 0.06));
   }
   h = max(h, rise(dr, 0.03, 0.05));
+  h += seams(p) * (1.0 - smoothstep(0.0, 0.01, h));
   // Tubes: a round ridge whose foot is filleted into whatever it crosses.
   for (int i = 0; i < MAX_PIPES; i++) {
     if (i >= pipeCount) break;
@@ -304,7 +320,8 @@ export class ChromeConsole {
     const h = 2 * (cfg.fitHalfHeight + MARGIN);
     this.detail.geometry.dispose();
     this.detail.geometry = spherePatchGeometry(0, 0, w, h, cfg.radius, 0, Math.round(w / this.vertexSpacing), Math.round(h / this.vertexSpacing));
-    const s = 2 * COVER * cfg.fitHalfWidth;
+    // Out past the edges of the widest view.
+    const s = 2 * Math.max(COVER * cfg.fitHalfWidth, cfg.radius * 0.95);
     this.backdrop.geometry.dispose();
     this.backdrop.geometry = spherePatchGeometry(0, 0, s, s, cfg.radius, -0.004, 96, 96);
 

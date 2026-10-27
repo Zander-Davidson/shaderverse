@@ -6,7 +6,7 @@ import type { LayoutConfig } from '../cockpit/layout';
 import type { StdFunction } from '../shader/stdlib';
 import { drawScreenBackdrop, drawScreenGlare, PHOSPHOR } from '../style/screen';
 import { COLORS, MONO, SANS } from '../theme';
-import { CanvasPanel } from './panel';
+import { MonitorPanel } from './monitor';
 import { PanelShape } from './shape';
 
 const PLANE_BG = '#04070a';
@@ -17,12 +17,13 @@ const PAD = 14;
 const PX_PER_UNIT = 280;
 const BEZEL = Math.round(0.2 * PX_PER_UNIT);
 
-export class PlotPanel extends CanvasPanel {
+export class PlotPanel extends MonitorPanel {
   private fn: StdFunction | null = null;
 
   constructor(cfg: LayoutConfig) {
-    super(cfg.plot, Math.round(cfg.plot.w * PX_PER_UNIT), Math.round(cfg.plot.h * PX_PER_UNIT), cfg.radius, 0.01);
+    super(cfg.plot, Math.round(cfg.plot.w * PX_PER_UNIT), Math.round(cfg.plot.h * PX_PER_UNIT));
     this.reshape(cfg);
+    this.hang(cfg, cfg.plot);
     void document.fonts?.ready.then(() => this.invalidate());
   }
 
@@ -40,8 +41,8 @@ export class PlotPanel extends CanvasPanel {
   relayout(cfg: LayoutConfig) {
     this.pixelWidth = this.canvas.width = Math.round(cfg.plot.w * PX_PER_UNIT);
     this.pixelHeight = this.canvas.height = Math.round(cfg.plot.h * PX_PER_UNIT);
-    this.rebuild(cfg.radius, cfg.plot);
     this.reshape(cfg);
+    this.hang(cfg, cfg.plot);
     this.invalidate();
   }
 

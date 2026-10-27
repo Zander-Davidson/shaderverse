@@ -1,12 +1,12 @@
 // Status readout (compile state, frame rate, time, playback, quality) and the
 // library panel (examples, import and export, shortcuts).
 
-import type { LayoutConfig, Rect } from '../cockpit/layout';
+import type { LayoutConfig, MonitorLayout } from '../cockpit/layout';
 import type { ProjectStore } from '../project/store';
 import type { Quality, ShaderRuntime } from '../shader/runtime';
 import { COLORS, MONO } from '../theme';
-import { CanvasPanel } from './panel';
-import { cutCircleFor, PanelShape } from './shape';
+import { MonitorPanel } from './monitor';
+import { PanelShape } from './shape';
 import { drawScreenBackdrop, drawScreenGlare, gelButton, PHOSPHOR } from '../style/screen';
 
 const PX_PER_UNIT = 256;
@@ -17,28 +17,30 @@ const BEZEL = Math.round(0.2 * PX_PER_UNIT);
  * Base for the right-hand panels. Their inner edge is carved by the portal's
  * clearance circle, so each row starts just right of the curve.
  */
-abstract class ReadoutPanel extends CanvasPanel {
+abstract class ReadoutPanel extends MonitorPanel {
   constructor(
-    rect: Rect,
+    m: MonitorLayout,
     protected cfg: LayoutConfig,
   ) {
-    super(rect, Math.round(rect.w * PX_PER_UNIT), Math.round(rect.h * PX_PER_UNIT), cfg.radius, 0.01);
+    super(m, Math.round(m.w * PX_PER_UNIT), Math.round(m.h * PX_PER_UNIT));
     this.reshape();
+    this.hang(cfg, m);
   }
 
-  protected relayoutTo(cfg: LayoutConfig, rect: Rect) {
+  protected relayoutTo(cfg: LayoutConfig, m: MonitorLayout) {
     this.cfg = cfg;
-    this.pixelWidth = this.canvas.width = Math.round(rect.w * PX_PER_UNIT);
-    this.pixelHeight = this.canvas.height = Math.round(rect.h * PX_PER_UNIT);
-    this.rebuild(cfg.radius, rect);
+    this.pixelWidth = this.canvas.width = Math.round(m.w * PX_PER_UNIT);
+    this.pixelHeight = this.canvas.height = Math.round(m.h * PX_PER_UNIT);
+    this.rect = { x: 0, y: 0, w: m.w, h: m.h };
     this.reshape();
+    this.hang(cfg, m);
     this.invalidate();
   }
 
   private reshape() {
     const W = this.pixelWidth;
     const H = this.pixelHeight;
-    const outer = new PanelShape(W, H, (this.cfg.cornerRadius / this.rect.w) * W, cutCircleFor(this.cfg, this.rect, W, H));
+    const outer = new PanelShape(W, H, (this.cfg.cornerRadius / this.rect.w) * W, null);
     this.setBezel(outer, BEZEL);
   }
 

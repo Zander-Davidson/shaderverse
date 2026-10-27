@@ -1,23 +1,10 @@
-// Panel silhouettes: a rounded rectangle with a concave cut where it meets the
-// circle around the portal and knob ring, so panels wrap around it. Shapes are
-// in panel pixels; the sphere-patch mesh supplies the curvature.
-
-import { bezelRadius, type LayoutConfig, type Rect } from '../cockpit/layout';
+// Panel silhouettes: a rounded rectangle, optionally with a concave circular
+// cut. Shapes are in panel pixels; the mesh supplies any curvature.
 
 export interface Circle {
   x: number;
   y: number;
   r: number;
-}
-
-/** The portal bezel's clearance circle in a panel's pixel coordinates. */
-export function cutCircleFor(cfg: LayoutConfig, rect: Rect, pixelWidth: number, pixelHeight: number): Circle {
-  const r = bezelRadius(cfg) + cfg.clearance;
-  return {
-    x: ((cfg.portal.x - (rect.x - rect.w / 2)) / rect.w) * pixelWidth,
-    y: ((rect.y + rect.h / 2 - cfg.portal.y) / rect.h) * pixelHeight,
-    r: (r / rect.w) * pixelWidth,
-  };
 }
 
 export class PanelShape {

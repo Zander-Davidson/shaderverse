@@ -8,7 +8,6 @@
 import { EditorSelection } from '@codemirror/state';
 import * as THREE from 'three';
 import { OVER_LAYER } from '../cockpit/compositor';
-import { wallToWorld } from './patch';
 import type { ViewUpdate } from '@codemirror/view';
 import type { LayoutConfig } from '../cockpit/layout';
 import { columnOf, offsetAt, TAB_SIZE } from '../editor/grid';
@@ -17,7 +16,8 @@ import type { ProjectStore } from '../project/store';
 import { functionAt, interactiveTokens, type FunctionHit } from '../source/functions';
 import { tokenize, type TokenType } from '../source/tokenizer';
 import { COLORS, KNOB_TINT, MONO } from '../theme';
-import { CanvasPanel, type PanelPointerEvent } from './panel';
+import { type PanelPointerEvent } from './panel';
+import { MonitorPanel } from './monitor';
 import { PanelShape } from './shape';
 import { drawScreenBackdrop, drawScreenGlare } from '../style/screen';
 
@@ -65,7 +65,7 @@ function expandTabs(text: string, col: number): string {
   return out;
 }
 
-export class CodePanel extends CanvasPanel {
+export class CodePanel extends MonitorPanel {
   private lines: Segment[][] = [];
   private linesFor = '';
   private hovering = false;
@@ -80,7 +80,6 @@ export class CodePanel extends CanvasPanel {
   private lastBlink = 0;
   private drag: { anchor: number } | null = null;
   private knobChip: { x: number; y: number; w: number; h: number } | null = null;
-  private radius: number;
   /**
    * The main caret is a small live mesh over the panel, so blinking doesn't
    * re-upload the (large) code texture.
@@ -97,9 +96,9 @@ export class CodePanel extends CanvasPanel {
     // Texture density chosen in the M4 legibility pass: ~1.35 texels per
     // screen pixel at 1600×900 and DPR 2.
     const pw = Math.round(cfg.code.w * PX_PER_UNIT);
-    super(cfg.code, pw, Math.round((pw * cfg.code.h) / cfg.code.w), cfg.radius, 0.01);
-    this.radius = cfg.radius;
+    super(cfg.code, pw, Math.round((pw * cfg.code.h) / cfg.code.w));
     this.reshape(cfg);
+    this.hang(cfg, cfg.code);
     this.caret = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ color: COLORS.accent, toneMapped: false, depthTest: false, transparent: true }),
@@ -136,9 +135,8 @@ export class CodePanel extends CanvasPanel {
   relayout(cfg: LayoutConfig) {
     this.pixelWidth = this.canvas.width = Math.round(cfg.code.w * PX_PER_UNIT);
     this.pixelHeight = this.canvas.height = Math.round((this.pixelWidth * cfg.code.h) / cfg.code.w);
-    this.rebuild(cfg.radius, cfg.code);
-    this.radius = cfg.radius;
     this.reshape(cfg);
+    this.hang(cfg, cfg.code);
     this.invalidate();
   }
 
@@ -201,11 +199,10 @@ export class CodePanel extends CanvasPanel {
     const px = this.ox + x;
     const py = this.oy + HEADER + PAD + (row + 0.5) * CODE_LINE_PX;
     const r = this.rect;
-    const wx = r.x + (px / this.pixelWidth - 0.5) * r.w;
-    const wy = r.y + (0.5 - py / this.pixelHeight) * r.h;
-    wallToWorld(wx, wy, this.radius, this.inset + 0.004, this.caret.position);
-    this.caret.lookAt(0, 0, 0);
-    this.caret.scale.set((3.5 / this.pixelWidth) * r.w, ((CODE_LINE_PX - 6) / this.pixelHeight) * r.h, 1);
+    const k = this.worldScale;
+    this.pointAt(px, py, 0.004, this.caret.position);
+    this.caret.quaternion.copy(this.rig.quaternion);
+    this.caret.scale.set((3.5 / this.pixelWidth) * r.w * k, ((CODE_LINE_PX - 6) / this.pixelHeight) * r.h * k, 1);
     this.caretPlaced = true;
   }
 

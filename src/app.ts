@@ -15,7 +15,6 @@ import { HelpOverlay, toast } from './overlays/help';
 import { KnobPopover } from './overlays/popover';
 import { screenBounds, screenPoint, type ScreenRect } from './panels/bounds';
 import { CodePanel } from './panels/code';
-import { wallToWorld } from './panels/patch';
 import { onPanelRedraw } from './panels/panel';
 import { PlotPanel } from './panels/plot';
 import { PointerRouter } from './panels/pointer';
@@ -114,13 +113,13 @@ export function startApp(root: HTMLElement): void {
   const library = new LibraryPanel(cfg, store, libraryActions);
   const knobs = new KnobBank(cfg, store);
 
-  cockpit.scene.add(code.caret, portal.hole, knobs.tubes.group, rim.mesh, portal.mesh, plot.mesh, code.mesh, status.mesh, library.mesh, knobs.group);
-  // Bezels, collars and tubing, molded into the console as one piece.
+  cockpit.scene.add(code.caret, portal.hole, rim.mesh, portal.mesh, plot.rig, code.rig, status.rig, library.rig, knobs.group);
+  // The portal's and knobs' collars, molded into the shell as one piece.
   const moldConsole = () =>
     cockpit.console.mold(renderer, cfg, {
-      panels: [plot, code, status, library].flatMap((p) => p.mold() ?? []),
+      panels: [],
       rings: [portalMold(cfg), ...knobs.molds(cfg)],
-      pipes: knobs.tubes.molds,
+      pipes: [],
     });
   moldConsole();
   const aniso = renderer.capabilities.getMaxAnisotropy();
@@ -313,7 +312,7 @@ export function startApp(root: HTMLElement): void {
     code.update();
     status.update();
     library.update();
-    knobs.update(now / 1000);
+    knobs.update();
     companion.update(now, dt);
     compositor.render();
   };
@@ -346,13 +345,10 @@ export function startApp(root: HTMLElement): void {
       store, runtime, router, cockpit, companion, code, plot, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
       knobPoint: (slot: number) => screenPoint(knobs.slots[slot]!.anchor(), cockpit.camera, canvas),
       bounds: overlayBounds,
-      /** Screen point of a source offset on the curved code panel. */
+      /** Screen point of a source offset on the code monitor. */
       codePoint: (pos: number) => {
         const px = code.pixelOf(pos);
-        const r = code.rect;
-        const wx = r.x + (px.x / code.pixelWidth - 0.5) * r.w;
-        const wy = r.y + (0.5 - px.y / code.pixelHeight) * r.h;
-        return screenPoint(wallToWorld(wx, wy, cfg.radius, 0.01), cockpit.camera, canvas);
+        return screenPoint(code.pointAt(px.x, px.y), cockpit.camera, canvas);
       },
     },
   });

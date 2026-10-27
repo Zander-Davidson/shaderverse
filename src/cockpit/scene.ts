@@ -6,6 +6,7 @@ import { cockpitEnvironment } from './environment';
 import { LOW_GFX } from '../style/quality';
 import { wallToWorld } from '../panels/patch';
 import { bezelRadius, knobSlotPosition, type LayoutConfig } from './layout';
+import { monitorCenter, monitorCorners } from './rig';
 import { KNOB_SLOTS } from '../project/schema';
 
 /** Seconds for the lean in and out. */
@@ -155,12 +156,20 @@ export class Cockpit {
         tanV = Math.max(tanV, Math.abs(p.y) / depth, Math.abs(p.x) / depth / aspect);
       }
     }
+    // And every hanging monitor, whole.
+    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library]) {
+      for (const c of monitorCorners(cfg, m)) {
+        c.applyMatrix4(inv);
+        tanV = Math.max(tanV, Math.abs(c.y) / -c.z, Math.abs(c.x) / -c.z / aspect);
+      }
+    }
     this.camera.fov = this.baseFov = (2 * Math.atan(tanV * 1.03) * 180) / Math.PI;
     this.camera.updateProjectionMatrix();
     // Side edges are measured sitting back, so turning doesn't move them.
-    const code = cfg.code;
-    this.leftEdge = wallToWorld(code.x + code.w / 2, 0, cfg.radius, 0, p).project(this.camera).x;
-    this.rightEdge = wallToWorld(cfg.status.x - cfg.status.w / 2, 0, cfg.radius, 0, p).project(this.camera).x;
+    // At the inner edges of the monitors on each side.
+    const xs = (ms: typeof cfg.code[]) => ms.flatMap((m) => monitorCorners(cfg, m).map((c) => c.project(this.camera).x));
+    this.leftEdge = Math.max(...xs([cfg.plot, cfg.code]));
+    this.rightEdge = Math.min(...xs([cfg.status, cfg.library]));
     this.leftRelease = this.leftEdge + RELEASE;
     this.rightRelease = this.rightEdge - RELEASE;
     this.computeSidePoses();
@@ -177,7 +186,7 @@ export class Cockpit {
     let x1 = cfg.portal.x + b;
     let y0 = cfg.portal.y - b;
     let y1 = cfg.portal.y + b;
-    const h = cfg.knobRing.size / 2;
+    const h = cfg.knobRow.size / 2;
     for (let i = 0; i < KNOB_SLOTS; i++) {
       const p = knobSlotPosition(cfg, i, KNOB_SLOTS);
       x0 = Math.min(x0, p.x - h);
@@ -187,34 +196,37 @@ export class Cockpit {
     }
     wallToWorld(cfg.portal.x, cfg.portal.y, cfg.radius, 0, this.portalCenter);
     wallToWorld((x0 + x1) / 2, (y0 + y1) / 2, cfg.radius, 0, this.leaned.target);
-    const ex = ((x1 - x0) / 2) * 1.08;
-    const ey = ((y1 - y0) / 2) * 1.08;
+    const ex = ((x1 - x0) / 2) * 1.15;
+    const ey = ((y1 - y0) / 2) * 1.15;
     const dist = Math.max(ey / tanHalfV, ex / (tanHalfV * aspect));
     const outward = this.leaned.target.clone().normalize();
     this.leaned.eye.copy(this.leaned.target).addScaledVector(outward, -dist);
   }
 
   /**
-   * Turned toward a side: the gaze swings partway to the side's panels, the
-   * head moves a little closer and the view narrows. Facing a panel undoes
-   * the wide lens's stretch at the screen edge, so the zoom has to outweigh it.
+   * Turned toward a side: the gaze swings partway to the side's monitors,
+   * the head moves a little closer and the view narrows. The monitors hang
+   * close, so a small turn swings them past the far portal.
    */
   private computeSidePoses() {
     const cfg = this.cfg;
-    // How far the head moves in, per side, tuned so both read as the same
-    // zoom: the readouts sit farther off-axis and need more.
+    // How far the head moves toward the monitors, and how far the gaze
+    // swings: a fraction of the way from straight ahead to their center,
+    // which is much nearer than the wall.
     const groups = {
-      left: { rects: [cfg.plot, cfg.code], closer: 0.2 },
-      right: { rects: [cfg.status, cfg.library], closer: 0.26 },
+      left: { monitors: [cfg.plot, cfg.code], closer: 0.17 },
+      right: { monitors: [cfg.status, cfg.library], closer: 0.17 },
     };
-    for (const [name, { rects, closer }] of Object.entries(groups)) {
+    const look = this.base.target.distanceTo(this.base.eye);
+    for (const [name, { monitors, closer }] of Object.entries(groups)) {
       const side = this.sides[name as 'left' | 'right'];
-      const x0 = Math.min(...rects.map((r) => r.x - r.w / 2));
-      const x1 = Math.max(...rects.map((r) => r.x + r.w / 2));
-      const y0 = Math.min(...rects.map((r) => r.y - r.h / 2));
-      const y1 = Math.max(...rects.map((r) => r.y + r.h / 2));
-      const center = wallToWorld((x0 + x1) / 2, (y0 + y1) / 2, cfg.radius, 0);
-      side.pose.target.lerpVectors(this.base.target, center, 0.42);
+      const center = new THREE.Vector3();
+      for (const m of monitors) center.add(monitorCenter(cfg, m));
+      center.divideScalar(monitors.length);
+      // The gaze turns nearly half the way toward them, at the wall's distance.
+      const dir = center.clone().sub(this.base.eye).normalize();
+      const ahead = this.base.target.clone().sub(this.base.eye).normalize();
+      side.pose.target.copy(this.base.eye).addScaledVector(ahead.lerp(dir, 0.46).normalize(), look);
       side.pose.eye.lerpVectors(this.base.eye, center, closer);
     }
   }

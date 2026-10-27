@@ -13,7 +13,6 @@ import { wallToWorld } from '../panels/patch';
 import { KNOB_SLOTS, type KnobRecord } from '../project/schema';
 import type { ProjectStore } from '../project/store';
 import { COLORS, KNOB_TINT, MONO } from '../theme';
-import { KnobTubes } from './tubes';
 
 /** Screen pixels of vertical drag for the full range; fine control divides by 10. */
 export const DRAG_PX_FULL_RANGE = 240;
@@ -38,7 +37,7 @@ const DISH = (192 - 14) / 384;
 
 function faceRect(cfg: LayoutConfig, slot: number): Rect {
   const p = knobSlotPosition(cfg, slot, KNOB_SLOTS);
-  const w = cfg.knobRing.size;
+  const w = cfg.knobRow.size;
   return { x: p.x, y: p.y, w, h: w };
 }
 
@@ -223,7 +222,7 @@ class KnobCap {
     wallToWorld(p.x, p.y, cfg.radius, 0.09, this.group.position);
     this.group.lookAt(0, 0, 0);
     // Cap geometry is modeled for a 0.98-wide face.
-    this.group.scale.setScalar(cfg.knobRing.size / 0.98);
+    this.group.scale.setScalar(cfg.knobRow.size / 0.98);
   }
 
   /** Empty slots keep the chrome cap but lose the angle notch. */
@@ -361,10 +360,8 @@ export class KnobSlot implements PointerTarget {
 export class KnobBank {
   readonly slots: KnobSlot[] = [];
   readonly group = new THREE.Group();
-  readonly tubes: KnobTubes;
 
   constructor(cfg: LayoutConfig, store: ProjectStore) {
-    this.tubes = new KnobTubes(cfg);
     for (let i = 0; i < KNOB_SLOTS; i++) {
       const s = new KnobSlot(cfg, i, store);
       this.slots.push(s);
@@ -374,16 +371,9 @@ export class KnobBank {
       const knobs = store.getState().project.knobs;
       for (const s of this.slots) {
         const k = knobs.find((x) => x.slot === s.slot) ?? null;
-        const was = !!s.knob;
         s.setKnob(k);
-        if (was !== !!k) {
-          this.tubes.setActive(s.slot, !!k, KNOB_TINT);
-          const g = this.tubes.tubeGroup(s.slot);
-          if (g) redrawListener.call(g);
-        }
       }
     };
-    for (let i = 0; i < KNOB_SLOTS; i++) this.tubes.setActive(i, false, KNOB_TINT);
     sync();
     store.subscribe((st, prev) => {
       if (st.project.knobs !== prev.project.knobs) sync();
@@ -392,22 +382,19 @@ export class KnobBank {
 
   relayout(cfg: LayoutConfig) {
     for (const s of this.slots) s.relayout(cfg);
-    this.tubes.relayout(cfg);
-    for (const s of this.slots) this.tubes.setActive(s.slot, !!s.knob, KNOB_TINT);
   }
 
   /** Collars for the console to mold around each slot's dish. */
   molds(cfg: LayoutConfig): RingMold[] {
-    const size = cfg.knobRing.size;
+    const size = cfg.knobRow.size;
     return this.slots.map((s) => {
       const p = knobSlotPosition(cfg, s.slot, KNOB_SLOTS);
       return { x: p.x, y: p.y, outer: size / 2 + 0.09, opening: size * DISH };
     });
   }
 
-  update(time = 0) {
+  update() {
     for (const s of this.slots) s.face.update();
-    this.tubes.update(time);
   }
 
   setAnisotropy(n: number) {
