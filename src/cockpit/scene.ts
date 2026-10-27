@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { ChromeConsole } from '../style/console';
-import { cockpitEnvironment } from './environment';
+import { cockpitEnvironment, glassEnvironment } from './environment';
 import { LOW_GFX } from '../style/quality';
 import { wallToWorld } from '../panels/patch';
 import { bezelRadius, knobSlotPosition, type LayoutConfig } from './layout';
@@ -56,6 +56,8 @@ export class Cockpit {
   readonly camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.05, 500);
   /** Dark backdrop beyond the chrome, in case any edge of the dome shows. */
   private shell: THREE.Mesh;
+  /** What the monitors' glass reflects, from setEnvironment(). */
+  glassEnvironment: THREE.Texture | null = null;
   /** The molded chrome console everything is set into. */
   readonly console: ChromeConsole;
   private readonly key: THREE.PointLight;
@@ -134,8 +136,12 @@ export class Cockpit {
     this.scene.environment = pmrem.fromCubemap(cube.texture).texture;
     this.scene.environmentIntensity = 1;
     cube.dispose();
-    pmrem.dispose();
     env.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    // The monitors' glass reflects a calmer room of its own.
+    const glass = glassEnvironment();
+    this.glassEnvironment = pmrem.fromScene(glass, 0.02).texture;
+    glass.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    pmrem.dispose();
   }
 
   /** Chooses the field of view so the layout's fit rectangle stays in view. */

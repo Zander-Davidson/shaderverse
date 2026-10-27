@@ -68,6 +68,13 @@ let caseMaterial: THREE.MeshPhysicalMaterial | null = null;
 let bezelMaterial: THREE.MeshPhysicalMaterial | null = null;
 let glassMaterial: THREE.MeshPhysicalMaterial | null = null;
 
+/** Sets what every monitor's glass reflects (the cockpit's environment until then). */
+export function setGlassEnvironment(tex: THREE.Texture | null): void {
+  if (!glassMaterial) return;
+  glassMaterial.envMap = tex;
+  glassMaterial.needsUpdate = true;
+}
+
 export abstract class MonitorPanel extends CanvasPanel {
   /** The whole monitor: screen, bezel and case, posed in the cockpit. */
   readonly rig = new THREE.Group();
@@ -89,9 +96,9 @@ export abstract class MonitorPanel extends CanvasPanel {
     glassMaterial ??= physicalMaterial({
       color: '#000000',
       metalness: 0,
-      roughness: LOW_GFX ? 0.25 : 0.05,
+      roughness: LOW_GFX ? 0.2 : 0.06,
       ior: 1.7,
-      envMapIntensity: 1.6,
+      envMapIntensity: 1.3,
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,

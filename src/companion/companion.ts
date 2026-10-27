@@ -9,6 +9,7 @@ import type { KnobBank } from '../knobs/knobs';
 import type { PanelPointerEvent, PointerTarget } from '../panels/panel';
 import { wallToWorld } from '../panels/patch';
 import { monitorCorners } from '../cockpit/rig';
+import { armPoints } from '../cockpit/arms';
 import { KNOB_SLOTS } from '../project/schema';
 import type { ProjectStore } from '../project/store';
 import type { ShaderRuntime } from '../shader/runtime';
@@ -372,7 +373,7 @@ export class Companion implements PointerTarget {
     }
   }
 
-  /** Monitors, the bezel, knobs and open overlays, as seen from `cam`. */
+  /** Monitors, their arms, the bezel, knobs and open overlays, as seen from `cam`. */
   keepOut(cam: THREE.Camera): KeepOut {
     const { cfg, canvas } = this.deps;
     const R = cfg.radius;
@@ -408,6 +409,20 @@ export class Companion implements PointerTarget {
     for (let i = 0; i < KNOB_SLOTS; i++) {
       const k = knobSlotPosition(cfg, i, KNOB_SLOTS);
       circles.push(circle(k.x, k.y, cfg.knobRow.size / 2));
+    }
+    // The arms, as a chain of circles down each one, where they're in front of the camera.
+    for (const m of [cfg.plot, cfg.code, cfg.status, cfg.library]) {
+      const a = armPoints(cfg, m);
+      const shoulder = a.mount.clone().add(new THREE.Vector3(0, -0.3, 0));
+      for (const [from, to] of [[shoulder, a.elbow], [a.elbow, a.wrist]] as const) {
+        const n = Math.max(1, Math.ceil(from.distanceTo(to) / 0.2));
+        for (let j = 0; j <= n; j++) {
+          const q = from.clone().lerp(to, j / n);
+          if (view.copy(q).applyMatrix4(cam.matrixWorldInverse).z > -0.1) continue;
+          const c = this.screen(q, cam);
+          circles.push({ x: c.x, y: c.y, r: this.screenRadius(q, 0.12, cam) });
+        }
+      }
     }
     // Flat overlays, in canvas pixels.
     const cr = canvas.getBoundingClientRect();

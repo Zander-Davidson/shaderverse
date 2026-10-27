@@ -169,13 +169,29 @@ float lip(float d, float width) {
   return mix(-0.01, height, sin(t * 1.5707963));
 }
 
-// Panel seams on the shell: shallow grooves between hull plates, so it reads
-// as a surface at a distance.
-const vec2 PLATE = vec2(4.4, 2.9);
+// Panel seams on the shell: shallow grooves between hull plates laid out in
+// rings around a hub set off the portal's center, so it reads as a surface at
+// a distance without lining up with anything. Rings widen outward unevenly;
+// each is cut into its own number of plates at its own angle.
+const vec2 HUB = vec2(-1.3, 1.9);
+float hash1(float n) { return fract(sin(n * 127.1 + 3.7) * 43758.5453); }
+float ringRadius(float k) { return 2.4 * pow(1.42, k) * (1.0 + 0.16 * (hash1(k) - 0.5)); }
 float seams(vec2 p) {
-  vec2 q = p / PLATE + 0.5;
-  vec2 d = (0.5 - abs(fract(q) - 0.5)) * PLATE;
-  return -0.03 * (1.0 - smoothstep(0.02, 0.09, min(d.x, d.y)));
+  vec2 d = p - HUB;
+  float r = length(d);
+  float k = floor(log(max(r, 0.01) / 2.4) / log(1.42));
+  float r0 = ringRadius(k);
+  float r1 = ringRadius(k + 1.0);
+  if (r < r0) { k -= 1.0; r1 = r0; r0 = ringRadius(k); }
+  else if (r > r1) { k += 1.0; r0 = r1; r1 = ringRadius(k + 1.0); }
+  float e = min(r - r0, r1 - r);
+  if (k >= 0.0) {
+    float n = floor(5.0 + k * 2.2 + hash1(k + 11.0) * 3.0);
+    float a = atan(d.y, d.x) / 6.2831853 + hash1(k + 3.0);
+    float f = fract(a * n);
+    e = min(e, min(f, 1.0 - f) / n * 6.2831853 * r);
+  }
+  return -0.03 * (1.0 - smoothstep(0.02, 0.09, e));
 }
 
 float segDist(vec2 p, vec4 s) {

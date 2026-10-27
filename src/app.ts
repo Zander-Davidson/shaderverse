@@ -20,6 +20,7 @@ import { screenBounds, screenPoint, type ScreenRect } from './panels/bounds';
 import { CodePanel } from './panels/code';
 import { onPanelRedraw } from './panels/panel';
 import { PlotPanel } from './panels/plot';
+import { setGlassEnvironment } from './panels/monitor';
 import { PointerRouter } from './panels/pointer';
 import { PortalPanel, PortalRim, portalMold } from './panels/portal';
 import { LibraryPanel, StatusPanel, type LibraryActions } from './panels/status';
@@ -115,6 +116,7 @@ export function startApp(root: HTMLElement): void {
   };
   const library = new LibraryPanel(cfg, store, libraryActions);
   const knobs = new KnobBank(cfg, store);
+  setGlassEnvironment(cockpit.glassEnvironment);
 
   const arms = new Arms(cfg);
   // The portal lights the back of the rig in the shader's colors. (It sits
@@ -291,6 +293,7 @@ export function startApp(root: HTMLElement): void {
     compositor.resize();
     // Render targets were lost with the context: bake the reflections and console again.
     cockpit.setEnvironment(renderer);
+    setGlassEnvironment(cockpit.glassEnvironment);
     moldConsole();
     runtime.recompile(store.getState().project.source);
     for (const p of [rim, plot, code, status, library]) p.invalidate();

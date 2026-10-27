@@ -105,9 +105,12 @@ export class Arms {
     const k = frame.scale;
     const g = new THREE.Group();
 
-    // Carriage riding the rail, and the turntable it swivels on below it.
-    const carriage = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.3), this.metal);
-    carriage.position.copy(mount).add(new THREE.Vector3(0, -0.15, 0));
+    // Carriage: a rounded sleeve riding the rail, and the turntable it
+    // swivels on below it.
+    const along = railPoint(cfg, m.arm.mount + 0.05).sub(railPoint(cfg, m.arm.mount - 0.05)).normalize();
+    const carriage = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.22, 8, 20), this.metal);
+    carriage.position.copy(mount);
+    carriage.quaternion.setFromUnitVectors(Y, along);
     const turntable = hub(mount.clone().add(new THREE.Vector3(0, -0.26, 0)), Y, 0.12, 0.05, this.chrome);
     const shoulder = mount.clone().add(new THREE.Vector3(0, -0.3, 0));
     g.add(carriage, turntable, hub(shoulder, Y, 0.085, 0.08, this.metal));
@@ -136,21 +139,17 @@ export class Arms {
     const knob = hub(knobBase, knobAxis, 0.038, 0.045, this.metal);
     g.add(knob);
 
-    // Wrist: a tilt yoke, two cheeks around a pin, on a stem to the monitor's back plate.
+    // Wrist: a tilt yoke, two round cheeks around a pin with chrome ends,
+    // on a stem to a round plate on the monitor's back.
     const back = new THREE.Vector3(0, 0, -1).applyQuaternion(frame.quaternion);
     const side = new THREE.Vector3(1, 0, 0).applyQuaternion(frame.quaternion);
-    const pin = hub(wrist, side, 0.03, 0.2, this.chrome);
+    g.add(hub(wrist, side, 0.07, 0.12, this.metal));
     for (const s of [-1, 1]) {
-      const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.12, 0.14), this.metal);
-      cheek.position.copy(wrist).addScaledVector(side, s * 0.085).addScaledVector(back, -0.04);
-      cheek.quaternion.copy(frame.quaternion);
-      g.add(cheek);
+      const cheek = wrist.clone().addScaledVector(side, s * 0.075);
+      g.add(hub(cheek, side, 0.085, 0.025, this.metal), hub(cheek.addScaledVector(side, s * 0.02), side, 0.03, 0.03, this.chrome));
     }
-    g.add(pin, rod(wrist, plate, 0.035, this.metal));
-    const vesa = new THREE.Mesh(new THREE.BoxGeometry(0.75 * k, 0.75 * k, 0.03), this.metal);
-    vesa.position.copy(plate).addScaledVector(back, -0.01);
-    vesa.quaternion.copy(frame.quaternion);
-    g.add(vesa);
+    g.add(rod(wrist, plate, 0.04, this.metal));
+    g.add(hub(plate.clone().addScaledVector(back, 0.01), back, 0.36 * k, 0.03, this.metal), hub(plate.clone().addScaledVector(back, 0.03), back, 0.07, 0.02, this.chrome));
 
     // The cable: alongside the arm, looping out around the elbow and
     // sagging a little between clips, into the back of the case.
