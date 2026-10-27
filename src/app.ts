@@ -8,6 +8,7 @@ import { Companion } from './companion/companion';
 import { Compositor } from './cockpit/compositor';
 import { Cockpit } from './cockpit/scene';
 import { Arms } from './cockpit/arms';
+import { HullCircuit } from './cockpit/hull';
 import { PortalGlow } from './cockpit/glow';
 import { wallToWorld } from './panels/patch';
 import { KnobBank } from './knobs/knobs';
@@ -119,13 +120,14 @@ export function startApp(root: HTMLElement): void {
   setGlassEnvironment(cockpit.glassEnvironment);
 
   const arms = new Arms(cfg);
+  const circuit = new HullCircuit(cfg);
   // The portal lights the back of the rig in the shader's colors. (It sits
   // behind the screens, so their convex glass never shows it as a glint.)
   const glow = new PortalGlow(renderer, runtime, !LOW_GFX);
   const placeLights = () => wallToWorld(cfg.portal.x, cfg.portal.y, cfg.radius, 0.8, glow.light.position);
   placeLights();
   cockpit.scene.add(glow.light);
-  cockpit.scene.add(code.caret, portal.hole, rim.mesh, portal.mesh, plot.rig, code.rig, status.rig, library.rig, arms.group, knobs.group);
+  cockpit.scene.add(code.caret, portal.hole, rim.mesh, portal.mesh, plot.rig, code.rig, status.rig, library.rig, arms.group, circuit.group, knobs.group);
   // The portal's and knobs' collars, molded into the shell as one piece.
   const moldConsole = () =>
     cockpit.console.mold(renderer, cfg, {
@@ -343,6 +345,7 @@ export function startApp(root: HTMLElement): void {
     status.relayout(cfg);
     library.relayout(cfg);
     arms.relayout(cfg);
+    circuit.relayout(cfg);
     placeLights();
     knobs.relayout(cfg);
     moldConsole();
