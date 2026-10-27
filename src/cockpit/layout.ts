@@ -73,9 +73,11 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
       // Overhead, between the knob arc and the readouts; else the low crook
       // between the code and the bottom of the arc.
       neutral: [{ x: 2.5, y: 3.8 }, { x: -0.5, y: -3.7 }, { x: -1.0, y: 3.9 }],
-      // In the gutter on the turned-to side, above or below.
-      left: [{ x: -1.35, y: 3.5 }, { x: -0.9, y: -3.4 }],
-      right: [{ x: 2.55, y: 3.4 }, { x: 2.5, y: -3.2 }],
+      // On the turned-to side of the portal: between the source and the
+      // knob arc, or between the portal and the library, low where the
+      // tubing and bezel leave room; else up beside the plot or the status.
+      left: [{ x: -1.6, y: -3.1 }, { x: -1.75, y: 3.05 }],
+      right: [{ x: 3.1, y: -2.9 }, { x: 3.1, y: 3.05 }],
       // Leaned in there is little room (it squeezes smaller to fit): the
       // nooks beside the bezel's top and bottom right, and beyond the top of
       // the knob arc.

@@ -20,7 +20,13 @@ export const FOCUS_S = 0.4;
 const INSTANT = typeof location !== 'undefined' && new URLSearchParams(location.search).get('camera') === 'instant';
 
 /** Field of view narrows by this fraction when turned to a side. */
-const FOCUS_ZOOM = 0.08;
+const FOCUS_ZOOM = 0.14;
+/**
+ * Once turned to a side, the pointer has to come this far (screen x, -1 to 1)
+ * back past that side's edge before the head turns back, so a small drift
+ * toward the middle doesn't snap the view home.
+ */
+const RELEASE = 0.3;
 
 /** Which side's panels the head turns toward: the source side or the readouts. */
 export type FocusSide = 'left' | 'right' | null;
@@ -58,6 +64,9 @@ export class Cockpit {
   /** Screen x (-1 to 1, sitting back) past which the pointer is over a side. */
   private leftEdge = -0.5;
   private rightEdge = 0.5;
+  /** Screen x the pointer has to cross back over to leave a side. */
+  private leftRelease = -0.2;
+  private rightRelease = 0.2;
   /** Field of view sitting back, from fit(). */
   private baseFov = 60;
 
@@ -141,6 +150,8 @@ export class Cockpit {
     const code = cfg.code;
     this.leftEdge = wallToWorld(code.x + code.w / 2, 0, cfg.radius, 0, p).project(this.camera).x;
     this.rightEdge = wallToWorld(cfg.status.x - cfg.status.w / 2, 0, cfg.radius, 0, p).project(this.camera).x;
+    this.leftRelease = this.leftEdge + RELEASE;
+    this.rightRelease = this.rightEdge - RELEASE;
     this.computeSidePoses();
     this.computeLeanPose(tanV * 1.03, aspect);
     this.applyPose();
@@ -179,10 +190,10 @@ export class Cockpit {
   private computeSidePoses() {
     const cfg = this.cfg;
     // How far the head moves in, per side, tuned so both read as the same
-    // slight zoom: the readouts sit farther off-axis and need more.
+    // zoom: the readouts sit farther off-axis and need more.
     const groups = {
-      left: { rects: [cfg.plot, cfg.code], closer: 0.12 },
-      right: { rects: [cfg.status, cfg.library], closer: 0.16 },
+      left: { rects: [cfg.plot, cfg.code], closer: 0.2 },
+      right: { rects: [cfg.status, cfg.library], closer: 0.26 },
     };
     for (const [name, { rects, closer }] of Object.entries(groups)) {
       const side = this.sides[name as 'left' | 'right'];
@@ -191,15 +202,19 @@ export class Cockpit {
       const y0 = Math.min(...rects.map((r) => r.y - r.h / 2));
       const y1 = Math.max(...rects.map((r) => r.y + r.h / 2));
       const center = wallToWorld((x0 + x1) / 2, (y0 + y1) / 2, cfg.radius, 0);
-      side.pose.target.lerpVectors(this.base.target, center, 0.3);
+      side.pose.target.lerpVectors(this.base.target, center, 0.42);
       side.pose.eye.lerpVectors(this.base.eye, center, closer);
     }
   }
 
-  /** Which side the pointer is over, from its screen x (-1 to 1). */
+  /**
+   * Which side to face for the pointer's screen x (-1 to 1). Entering a side
+   * takes reaching its edge; leaving it takes coming back past its release
+   * line, nearer the middle.
+   */
   sideAt(ndcX: number): FocusSide {
-    if (ndcX < this.leftEdge) return 'left';
-    if (ndcX > this.rightEdge) return 'right';
+    if (ndcX < (this.sides.left.goal ? this.leftRelease : this.leftEdge)) return 'left';
+    if (ndcX > (this.sides.right.goal ? this.rightRelease : this.rightEdge)) return 'right';
     return null;
   }
 
@@ -282,7 +297,7 @@ export class Cockpit {
       target.addScaledVector(this.base.target, -q).addScaledVector(side.pose.target, q);
       const turn = Math.sin(Math.PI * easeInOutCubic(at));
       eye.y -= 0.08 * turn;
-      roll += side.dir * (0.012 * turn + 0.006 * q);
+      roll += side.dir * (0.014 * turn + 0.01 * q);
       zoom += FOCUS_ZOOM * q;
     }
     camera.up.set(roll, 1, 0).normalize();
