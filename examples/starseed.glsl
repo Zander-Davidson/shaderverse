@@ -106,8 +106,11 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord,
 {
     vec2 uv = (2.0 * fragCoord - iResolution.xy) / iResolution.y;
 
-    float yaw = iTime * 0.08 + (iMouse.z > 0.0 ? 6.2831 * iMouse.x / iResolution.x : 0.0);
-    float pitch = 0.25 + (iMouse.z > 0.0 ? 1.2 * (iMouse.y / iResolution.y - 0.5) : 0.15 * sin(iTime * 0.1));
+    // Dragging turns the view from where the press began, on top of the slow
+    // drift, so pressing never jumps it.
+    vec2 drag = iMouse.z > 0.0 ? (iMouse.xy - abs(iMouse.zw)) / iResolution.xy : vec2(0.0);
+    float yaw = iTime * 0.08 + 6.2831 * drag.x;
+    float pitch = clamp(0.25 + 0.15 * sin(iTime * 0.1) + 1.2 * drag.y, -1.2, 1.4);
     vec3 ro = 3.3 * vec3(cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw));
     vec3 fw = normalize(-ro);
     vec3 rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));

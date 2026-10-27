@@ -1,11 +1,11 @@
-// ORBITS — a small system of glowing bodies. Drag on the portal to move the sun.
+// ORBITS — a small system of glowing bodies around a central sun.
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord,
                in int bodies, in float spread, in float orbitSpeed,
                in float glow, in float sunSize)
 {
     vec2 uv = (2.0 * fragCoord - iResolution.xy) / iResolution.y;
-    vec2 sun = iMouse.z > 0.0 ? (2.0 * iMouse.xy - iResolution.xy) / iResolution.y : vec2(0.0);
+    vec2 sun = vec2(0.0);
 
     vec3 col = vec3(0.0);
     col += vec3(1.0, 0.7, 0.3) * sunSize * reciprocal(length(uv - sun));
