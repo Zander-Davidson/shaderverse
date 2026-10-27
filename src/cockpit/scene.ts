@@ -28,6 +28,14 @@ const FOCUS_ZOOM = 0.14;
  */
 const RELEASE = 0.3;
 
+/**
+ * Leaning in counter-zooms the shader by the portal's growth on screen raised
+ * to this power, like the view out a window as you come up to the glass: at
+ * 1 the scene beyond keeps its size while more of it comes into view; a
+ * little above, it even draws slightly smaller.
+ */
+const WINDOW_PARALLAX = 1.12;
+
 /** Which side's panels the head turns toward: the source side or the readouts. */
 export type FocusSide = 'left' | 'right' | null;
 
@@ -69,6 +77,9 @@ export class Cockpit {
   private rightRelease = 0.2;
   /** Field of view sitting back, from fit(). */
   private baseFov = 60;
+  private readonly portalCenter = new THREE.Vector3();
+  /** How much more of the shader's plane the portal shows; see WINDOW_PARALLAX. */
+  viewZoom = 1;
 
   constructor(private cfg: LayoutConfig) {
     // No scene.background: a color background forces a clear on every render
@@ -174,6 +185,7 @@ export class Cockpit {
       y0 = Math.min(y0, p.y - h);
       y1 = Math.max(y1, p.y + h);
     }
+    wallToWorld(cfg.portal.x, cfg.portal.y, cfg.radius, 0, this.portalCenter);
     wallToWorld((x0 + x1) / 2, (y0 + y1) / 2, cfg.radius, 0, this.leaned.target);
     const ex = ((x1 - x0) / 2) * 1.08;
     const ey = ((y1 - y0) / 2) * 1.08;
@@ -273,6 +285,10 @@ export class Cockpit {
 
   private applyPose() {
     this.poseInto(this.camera, this.lean, this.sides.left.at, this.sides.right.at);
+    // The portal's growth on screen from the lean alone, by how much nearer it is.
+    const eye = new THREE.Vector3().lerpVectors(this.base.eye, this.leaned.eye, easeInOutCubic(this.lean));
+    const growth = this.base.eye.distanceTo(this.portalCenter) / eye.distanceTo(this.portalCenter);
+    this.viewZoom = growth ** WINDOW_PARALLAX;
   }
 
   /** Poses a camera for a lean and side-turn progress (each 0 to 1). */

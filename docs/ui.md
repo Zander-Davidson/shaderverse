@@ -57,6 +57,12 @@ through a circular mask, so the shader's coordinate system stays
 conventional. Clicking or dragging on the portal is passed to the shader
 as mouse input (`iMouse`) in the shader's own pixel coordinates.
 
+Leaning in behaves like coming up to a window: the portal grows on
+screen, but the shader counter-zooms so its scene keeps roughly its size
+(ending slightly smaller) while more of it comes into view at the edges.
+`fragCoord` and `iMouse` are scaled about the center to match, and
+`iResolution` is unchanged.
+
 The user can continuously observe the result while manipulating
 parameters elsewhere in the cockpit.
 

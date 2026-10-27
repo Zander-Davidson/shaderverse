@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { compileShader, type CompileResult } from './compile';
-import { VERTEX_SHADER, knobUniformName, type WrapperParam } from './wrapper';
+import { VERTEX_SHADER, VIEW_ZOOM_UNIFORM, knobUniformName, type WrapperParam } from './wrapper';
 
 export const QUALITY_SIZES = { low: 384, medium: 640, high: 1024 } as const;
 export type Quality = keyof typeof QUALITY_SIZES;
@@ -24,6 +24,8 @@ export class ShaderRuntime {
   private knobValues = new Map<string, number>();
   private mouse = new THREE.Vector4(0, 0, 0, 0);
   private lastDelta = 0;
+  /** See VIEW_ZOOM_UNIFORM. */
+  private viewZoom = 1;
   /** Set when an input changes, so a paused shader re-renders once. */
   private dirty = true;
 
@@ -68,6 +70,7 @@ export class ShaderRuntime {
       iFrame: { value: 0 },
       iMouse: { value: this.mouse },
       iDate: { value: new THREE.Vector4() },
+      [VIEW_ZOOM_UNIFORM]: { value: this.viewZoom },
     };
     for (const p of result.params) {
       uniforms[knobUniformName(p.name)] = { value: this.knobValues.get(p.name) ?? zeroOf(p.type) };
@@ -98,6 +101,13 @@ export class ShaderRuntime {
     if (u) u.value = value;
   }
 
+  /** Shows more of the shader's plane, scaled about the center; see VIEW_ZOOM_UNIFORM. */
+  setViewZoom(zoom: number): void {
+    if (zoom === this.viewZoom) return;
+    this.viewZoom = zoom;
+    this.dirty = true;
+  }
+
   /** True while the mouse is held in the portal. */
   get mouseHeld(): boolean {
     return this.mouse.z > 0;
@@ -106,6 +116,10 @@ export class ShaderRuntime {
   /** Shadertoy mouse: xy while held, zw the click point, negated when released. */
   pointer(x: number, y: number, down: boolean, pressed: boolean): void {
     this.dirty = true;
+    // Into the zoomed view's coordinates, the same as fragCoord.
+    const c = this.target.width / 2;
+    x = (x - c) * this.viewZoom + c;
+    y = (y - c) * this.viewZoom + c;
     if (pressed) this.mouse.set(x, y, x, y);
     else if (down) this.mouse.set(x, y, Math.abs(this.mouse.z), -Math.abs(this.mouse.w));
     else this.mouse.set(this.mouse.x, this.mouse.y, -Math.abs(this.mouse.z), -Math.abs(this.mouse.w));
@@ -131,6 +145,7 @@ export class ShaderRuntime {
     u.iTime!.value = this.time;
     u.iTimeDelta!.value = this.lastDelta;
     u.iFrame!.value = this.frame;
+    u[VIEW_ZOOM_UNIFORM]!.value = this.viewZoom;
     const d = new Date();
     (u.iDate!.value as THREE.Vector4).set(
       d.getFullYear(),
