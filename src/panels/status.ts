@@ -1,9 +1,10 @@
-// Status readout (compile state, frame rate, time, playback, quality) and the
-// library panel (examples, import and export, shortcuts).
+// Status readout (compile state, frame rate, time, resolution) and the library
+// panel (examples, import and export, shortcuts). Playback and quality are
+// keyboard shortcuts until the hanging console's buttons take them.
 
 import type { LayoutConfig, MonitorLayout } from '../cockpit/layout';
 import type { ProjectStore } from '../project/store';
-import type { Quality, ShaderRuntime } from '../shader/runtime';
+import type { ShaderRuntime } from '../shader/runtime';
 import { COLORS, MONO } from '../theme';
 import { MonitorPanel } from './monitor';
 import { PanelShape } from './shape';
@@ -14,13 +15,15 @@ const HEAD = 56;
 const BEZEL = Math.round(0.2 * PX_PER_UNIT);
 
 /**
- * Base for the right-hand panels. Their inner edge is carved by the portal's
- * clearance circle, so each row starts just right of the curve.
+ * Base for the right-hand monitors. Content is laid out in "view" pixels,
+ * `zoom` texels each, so the readouts stay legible on monitors that are small
+ * on screen; the texture keeps its full resolution.
  */
 abstract class ReadoutPanel extends MonitorPanel {
   constructor(
     m: MonitorLayout,
     protected cfg: LayoutConfig,
+    protected readonly zoom: number,
   ) {
     super(m, Math.round(m.w * PX_PER_UNIT), Math.round(m.h * PX_PER_UNIT));
     this.reshape();
@@ -44,32 +47,49 @@ abstract class ReadoutPanel extends MonitorPanel {
     this.setBezel(outer, BEZEL);
   }
 
-  /** Left edge for content spanning screen rows y0..y1, clear of the curve. */
-  protected left(y0: number, y1: number): number {
-    return Math.max(16, this.shape!.leftLimit(y0 + this.oy, y1 + this.oy) - this.ox + 18);
+  /** Width and height of the screen in view pixels. */
+  protected get vw(): number {
+    return this.iw / this.zoom;
   }
 
-  /** Right edge for content spanning screen rows y0..y1. */
+  protected get vh(): number {
+    return this.ih / this.zoom;
+  }
+
+  /** Left edge for content spanning view rows y0..y1, inside the corners. */
+  protected left(y0: number, y1: number): number {
+    const z = this.zoom;
+    return Math.max(12, (this.shape!.leftLimit(y0 * z + this.oy, y1 * z + this.oy) - this.ox) / z + 14);
+  }
+
+  /** Right edge for content spanning view rows y0..y1. */
   protected rightAt(y0: number, y1: number): number {
-    return this.shape!.rightLimit(y0 + this.oy, y1 + this.oy) - this.ox - 18;
+    const z = this.zoom;
+    return (this.shape!.rightLimit(y0 * z + this.oy, y1 * z + this.oy) - this.ox) / z - 14;
   }
 
   protected get right(): number {
-    return this.rightAt(HEAD, this.ih - HEAD);
+    return this.rightAt(HEAD, this.vh - HEAD);
+  }
+
+  protected override addButton(b: { id: string; x: number; y: number; w: number; h: number }): void {
+    const z = this.zoom;
+    super.addButton({ id: b.id, x: b.x * z, y: b.y * z, w: b.w * z, h: b.h * z });
   }
 
   protected frame(ctx: CanvasRenderingContext2D, title: string, tag: string) {
     this.shape!.begin(ctx, COLORS.panel);
     // Lay out in screen coordinates; end() restores.
     ctx.translate(this.ox, this.oy);
-    drawScreenBackdrop(ctx, this.iw, this.ih);
+    ctx.scale(this.zoom, this.zoom);
+    drawScreenBackdrop(ctx, this.vw, this.vh);
     const hg = ctx.createLinearGradient(0, 0, 0, HEAD);
     hg.addColorStop(0, 'rgba(63, 242, 196, 0.16)');
     hg.addColorStop(1, 'rgba(63, 242, 196, 0.04)');
     ctx.fillStyle = hg;
-    ctx.fillRect(0, 0, this.iw, HEAD);
+    ctx.fillRect(0, 0, this.vw, HEAD);
     ctx.fillStyle = 'rgba(63, 242, 196, 0.35)';
-    ctx.fillRect(0, HEAD, this.iw, 2);
+    ctx.fillRect(0, HEAD, this.vw, 2);
     ctx.font = `700 24px ${MONO}`;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = PHOSPHOR;
@@ -81,7 +101,7 @@ abstract class ReadoutPanel extends MonitorPanel {
   }
 
   protected end(ctx: CanvasRenderingContext2D) {
-    drawScreenGlare(ctx, this.iw, this.ih);
+    drawScreenGlare(ctx, this.vw, this.vh);
     this.shape!.finish(ctx, '#0a1413', '#3ff2c422');
   }
 
@@ -101,11 +121,18 @@ abstract class ReadoutPanel extends MonitorPanel {
     ctx.textAlign = 'left';
   }
 
-  /** Buttons laid side by side across a row, from the curve to the right edge. */
-  protected buttonRow(ctx: CanvasRenderingContext2D, y: number, h: number, items: { id: string; text: string; active?: boolean }[], align: CanvasTextAlign = 'center') {
-    const x0 = this.left(y, y + h);
-    const gap = 12;
-    const w = (this.right - x0 - gap * (items.length - 1)) / items.length;
+  /** Buttons laid side by side across a row, from x0 (default: the left edge) to x1 (the right edge). */
+  protected buttonRow(
+    ctx: CanvasRenderingContext2D,
+    y: number,
+    h: number,
+    items: { id: string; text: string; active?: boolean }[],
+    align: CanvasTextAlign = 'center',
+    x0 = this.left(y, y + h),
+    x1 = this.right,
+  ) {
+    const gap = 10;
+    const w = (x1 - x0 - gap * (items.length - 1)) / items.length;
     items.forEach((it, i) => this.button(ctx, it.id, it.text, x0 + i * (w + gap), y, w, h, it.active, align));
   }
 
@@ -145,7 +172,7 @@ export class StatusPanel extends ReadoutPanel {
     private readonly store: ProjectStore,
     private readonly runtime: ShaderRuntime,
   ) {
-    super(cfg.status, cfg);
+    super(cfg.status, cfg, 1.75);
     store.subscribe((s, p) => {
       if (s.compile !== p.compile || s.project.playback !== p.project.playback) this.invalidate();
     });
@@ -187,45 +214,19 @@ export class StatusPanel extends ReadoutPanel {
     ctx.font = `600 36px ${MONO}`;
     ctx.fillText(st.t, this.left(110, 140), 124);
 
-    this.row(ctx, 'FPS', this.fps.toFixed(0), 178);
-    this.row(ctx, 'TIME', `${this.runtime.time.toFixed(2)}s`, 222);
-    this.row(ctx, 'FRAME', String(this.runtime.frame), 266);
-    this.row(ctx, 'RES', `${this.runtime.size}²`, 310);
+    this.row(ctx, 'FPS', this.fps.toFixed(0), 186);
+    this.row(ctx, 'TIME', `${this.runtime.time.toFixed(2)}s`, 234);
+    this.row(ctx, 'FRAME', String(this.runtime.frame), 282);
+    this.row(ctx, 'RES', `${this.runtime.size}²`, 330);
 
-    ctx.fillStyle = 'rgba(63, 242, 196, 0.25)';
-    const lx = this.left(339, 342);
-    ctx.fillRect(lx, 340, this.right - lx, 2);
-    this.label(ctx, 'PLAYBACK', 370);
-    this.buttonRow(ctx, 390, 64, [
-      { id: 'play', text: project.playback.playing ? '❚❚ PAUSE' : '▶ PLAY', active: !project.playback.playing },
-      { id: 'restart', text: '⟲ RESTART' },
-    ]);
-
-    this.label(ctx, 'QUALITY', 492);
-    this.buttonRow(
-      ctx,
-      512,
-      64,
-      (['low', 'medium', 'high'] as Quality[]).map((q) => ({
-        id: `q:${q}`,
-        text: q === 'medium' ? 'MED' : q.toUpperCase(),
-        active: project.playback.quality === q,
-      })),
-    );
-
-    ctx.font = `18px ${MONO}`;
+    ctx.font = `600 16px ${MONO}`;
     ctx.fillStyle = COLORS.dim;
-    if (compile.status === 'error') ctx.fillText('LAST GOOD PROGRAM RUNNING', this.left(610, 630), 620);
-    const fy = this.ih - 34;
-    ctx.fillText('SPACE pause · R restart · Q quality', this.left(fy - 10, fy + 10), fy);
+    const state = `${project.playback.playing ? 'PLAYING' : 'PAUSED'} · ${project.playback.quality.toUpperCase()}`;
+    ctx.fillText(state, this.left(366, 386), 376);
+    if (compile.status === 'error') ctx.fillText('LAST GOOD PROGRAM RUNNING', this.left(396, 416), 406);
+    const fy = this.vh - 26;
+    ctx.fillText('SPACE play · R restart · Q quality', this.left(fy - 10, fy + 10), fy);
     this.end(ctx);
-  }
-
-  protected onButton(id: string): void {
-    const s = this.store.getState();
-    if (id === 'play') s.dispatch({ type: 'setPlayback', playing: !s.project.playback.playing });
-    else if (id === 'restart') s.dispatch({ type: 'restart' });
-    else if (id.startsWith('q:')) s.dispatch({ type: 'setPlayback', quality: id.slice(2) as Quality });
   }
 }
 
@@ -244,7 +245,7 @@ export class LibraryPanel extends ReadoutPanel {
     private readonly store: ProjectStore,
     private readonly actions: LibraryActions,
   ) {
-    super(cfg.library, cfg);
+    super(cfg.library, cfg, 1.6);
     store.subscribe((s, p) => {
       if (s.project.name !== p.project.name) this.invalidate();
     });
@@ -258,12 +259,18 @@ export class LibraryPanel extends ReadoutPanel {
     const current = this.store.getState().project.name;
     this.frame(ctx, 'LIBRARY', 'v1.0');
     this.label(ctx, 'NEW FROM EXAMPLE', 80);
-    const step = 47;
+    // Two columns, down the left one first.
+    const step = 46;
+    const rows = Math.ceil(this.actions.examples.length / 2);
+    const x0 = this.left(96, 96 + rows * step);
+    const mid = (x0 + this.right) / 2;
     this.actions.examples.forEach((name, i) => {
-      const y = 96 + i * step;
-      this.buttonRow(ctx, y, step - 8, [{ id: `ex:${i}`, text: `${String(i + 1).padStart(2, '0')}  ${name.toUpperCase()}`, active: name === current }], 'left');
+      const col = Math.floor(i / rows);
+      const y = 96 + (i % rows) * step;
+      const item = { id: `ex:${i}`, text: `${String(i + 1).padStart(2, '0')} ${name.toUpperCase()}`, active: name === current };
+      this.buttonRow(ctx, y, step - 8, [item], 'left', col ? mid + 5 : x0, col ? this.right : mid - 5);
     });
-    const y0 = 96 + this.actions.examples.length * step + 12;
+    const y0 = 96 + rows * step + 12;
     ctx.fillStyle = 'rgba(63, 242, 196, 0.25)';
     const lx = this.left(y0 - 1, y0 + 2);
     ctx.fillRect(lx, y0, this.right - lx, 2);

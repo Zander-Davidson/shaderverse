@@ -23,6 +23,7 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
     if (r.size !== undefined) f.add(r, 'size', 1, 12, 0.05).onChange(onChange);
   };
   rect('portal', cfg.portal);
+  gui.add(cfg, 'monitorFacing', 0, 1, 0.01).name('monitor facing').onChange(onChange);
 
   const monitor = (name: string, m: MonitorLayout) => {
     const f = gui.addFolder(name);

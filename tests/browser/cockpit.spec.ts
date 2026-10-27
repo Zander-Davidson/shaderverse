@@ -56,7 +56,7 @@ test('portal input becomes iMouse in shader pixels', async ({ page }) => {
   expect(m.y / m.size).toBeGreaterThan(0.5); // dragged up → larger y (origin bottom-left)
 });
 
-test('the status panel toggles playback', async ({ page }) => {
+test('Space toggles playback', async ({ page }) => {
   await page.keyboard.press('Space');
   await expect.poll(() => page.evaluate(() => (window as any).__sv.store.getState().project.playback.playing)).toBe(false);
   await page.keyboard.press('Space');

@@ -26,12 +26,15 @@ const DEG = Math.PI / 180;
 const m4 = new THREE.Matrix4();
 const up = new THREE.Vector3(0, 1, 0);
 const tilt = new THREE.Quaternion();
+const flat = new THREE.Quaternion();
+const back = new THREE.Vector3();
 const euler = new THREE.Euler();
 
 /**
- * A monitor's frame: centered at its hang point and facing the eye (local +z
- * toward the viewer), then turned by its posed yaw, pitch and roll, so no two
- * hang quite square to the seat.
+ * A monitor's frame: centered at its hang point and facing the viewer (local
+ * +z toward them), partway between square to the eye and square to the view
+ * (cfg.monitorFacing), then turned by its posed yaw, pitch and roll, so no
+ * two hang quite square to the seat.
  */
 export function monitorFrame(cfg: LayoutConfig, m: MonitorLayout): Frame {
   const position = rigToWorld(cfg, m.at[0], m.at[1], m.at[2]);
@@ -39,6 +42,10 @@ export function monitorFrame(cfg: LayoutConfig, m: MonitorLayout): Frame {
   // Matrix4.lookAt points local +z from the target to the eye.
   m4.lookAt(eye, position, up);
   const quaternion = new THREE.Quaternion().setFromRotationMatrix(m4);
+  // Square to the view: local +z straight back toward the seat.
+  back.copy(position).z -= 1;
+  m4.lookAt(back, position, up);
+  quaternion.slerp(flat.setFromRotationMatrix(m4), cfg.monitorFacing);
   // Positive yaw turns the screen's right edge away from the viewer, positive
   // pitch tips its top toward them, positive roll turns it counterclockwise.
   euler.set(m.pitch * DEG, m.yaw * DEG, m.roll * DEG, 'YXZ');

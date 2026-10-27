@@ -35,6 +35,12 @@ export interface LayoutConfig {
   fitHalfWidth: number;
   fitHalfHeight: number;
   portal: { x: number; y: number; size: number };
+  /**
+   * How square the monitors hang to the view: 0 faces each one at the eye
+   * (the wide lens then stretches them like walls running toward the portal),
+   * 1 hangs them flat, parallel to the screen.
+   */
+  monitorFacing: number;
   /** Corner radius of panel silhouettes, in panel units. */
   cornerRadius: number;
   /** Knobs sit in a row below the portal, left to right: `y` below its center, `spacing` apart. */
@@ -71,6 +77,7 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   fitHalfWidth: 5.5,
   fitHalfHeight: 5.6,
   portal: { x: 0, y: 0.3, size: 6.8 },
+  monitorFacing: 0.55,
   cornerRadius: 0.38,
   knobRow: { y: -5.0, size: 1.05, spacing: 1.1 },
   // Source and plot on the left, readouts on the right, close to the camera
@@ -78,8 +85,8 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   // pilot swung it into place.
   plot: { w: 4.9, h: 2.6, at: [-3.35, 1.45, 4.0], scale: 0.55, yaw: -4, pitch: 3, roll: 1.5 },
   code: { w: 4.9, h: 5.4, at: [-3.3, -0.95, 3.8], scale: 0.55, yaw: 3, pitch: 0, roll: -0.8 },
-  status: { w: 3.3, h: 3.88, at: [3.0, 1.15, 3.9], scale: 0.55, yaw: -2, pitch: 2, roll: -1.2 },
-  library: { w: 3.3, h: 3.88, at: [3.05, -1.2, 3.7], scale: 0.55, yaw: -5, pitch: -2, roll: 0.7 },
+  status: { w: 4.0, h: 3.88, at: [3.15, 1.15, 3.9], scale: 0.55, yaw: -2, pitch: 2, roll: -1.2 },
+  library: { w: 4.0, h: 3.88, at: [3.2, -1.2, 3.7], scale: 0.55, yaw: -5, pitch: -2, roll: 0.7 },
   companion: {
     size: 1.1,
     standoff: 0.3,
