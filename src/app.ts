@@ -306,6 +306,7 @@ export function startApp(root: HTMLElement): void {
       compositor.markAll();
       editor.position();
     }
+    runtime.setViewZoom(cockpit.viewZoom);
     runtime.render(dt);
     rim.update();
     plot.update();

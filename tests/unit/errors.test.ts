@@ -48,7 +48,7 @@ describe('wrapper', () => {
     expect(w).toContain('uniform float svKnob_a;');
     const lineIdx = lines.indexOf('#line 1');
     expect(lines[lineIdx + 1]).toBe(src);
-    expect(w).toContain('mainImage(svColor, gl_FragCoord.xy, svKnob_a);');
+    expect(w).toContain('mainImage(svColor, svCoord, svKnob_a);');
     for (const u of ['iResolution', 'iTime', 'iTimeDelta', 'iFrame', 'iMouse', 'iDate']) {
       expect(w).toMatch(new RegExp(`uniform \\w+ ${u};`));
     }
