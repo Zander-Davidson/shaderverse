@@ -245,8 +245,9 @@ export function startApp(root: HTMLElement): void {
         helpOverlay.hide();
         break;
       default:
-        if (/^[1-9]$/.test(e.key) && EXAMPLES[Number(e.key) - 1]) {
-          libraryActions.loadExample(Number(e.key) - 1);
+        // 1–9 load the first nine examples, 0 the tenth.
+        if (/^[0-9]$/.test(e.key) && EXAMPLES[(Number(e.key) + 9) % 10]) {
+          libraryActions.loadExample((Number(e.key) + 9) % 10);
           break;
         }
         return;
