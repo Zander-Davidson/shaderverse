@@ -33,6 +33,17 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
   ring.add(cfg.knobRing, 'size', 0.4, 2, 0.01).onChange(onChange);
   ring.add(cfg.knobRing, 'startDeg', 0, 360, 1).onChange(onChange);
   ring.add(cfg.knobRing, 'stepDeg', 5, 45, 0.5).onChange(onChange);
+  const comp = gui.addFolder('companion');
+  comp.close();
+  comp.add(cfg.companion, 'size', 0.3, 2, 0.01).onChange(onChange);
+  comp.add(cfg.companion, 'standoff', 0, 0.8, 0.01).onChange(onChange);
+  comp.add(cfg.companion, 'margin', 0, 0.6, 0.01).onChange(onChange);
+  for (const [view, perches] of Object.entries(cfg.companion.perches)) {
+    perches.forEach((p, i) => {
+      comp.add(p, 'x', -10, 10, 0.05).name(`${view} ${i + 1} x`).onChange(onChange);
+      comp.add(p, 'y', -6, 6, 0.05).name(`${view} ${i + 1} y`).onChange(onChange);
+    });
+  }
 
   gui.add(
     {
@@ -47,13 +58,14 @@ export function createTuningPanel(cfg: LayoutConfig, onChange: () => void): GUI 
   gui.add(
     {
       reset: () => {
-        const d = structuredClone(DEFAULT_LAYOUT) as unknown as Record<string, unknown>;
-        const target = cfg as unknown as Record<string, unknown>;
         // Assign nested objects in place so the controllers stay bound to them.
-        for (const [k, v] of Object.entries(d)) {
-          if (v && typeof v === 'object') Object.assign(target[k] as object, v);
-          else target[k] = v;
-        }
+        const assign = (target: Record<string, unknown>, from: Record<string, unknown>) => {
+          for (const [k, v] of Object.entries(from)) {
+            if (v && typeof v === 'object' && target[k]) assign(target[k] as Record<string, unknown>, v as Record<string, unknown>);
+            else target[k] = v;
+          }
+        };
+        assign(cfg as unknown as Record<string, unknown>, structuredClone(DEFAULT_LAYOUT) as unknown as Record<string, unknown>);
         gui.controllersRecursive().forEach((c) => c.updateDisplay());
         onChange();
       },

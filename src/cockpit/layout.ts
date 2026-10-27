@@ -29,6 +29,25 @@ export interface LayoutConfig {
   code: Rect;
   status: Rect;
   library: Rect;
+  companion: CompanionLayout;
+}
+
+/** A spot on the wall the companion floats in front of, in wall units. */
+export interface Perch {
+  x: number;
+  y: number;
+}
+
+/** The companion (docs/companion.md): its size, float and perches. */
+export interface CompanionLayout {
+  /** Apparent width, as wall units straight ahead sitting back; the same on screen in every view. */
+  size: number;
+  /** How far it floats off the wall: the fraction of the way to the eye. */
+  standoff: number;
+  /** Clearance kept from panels, knobs and overlays, in wall units. */
+  margin: number;
+  /** Candidate perches for each camera view, best first. */
+  perches: { neutral: Perch[]; left: Perch[]; right: Perch[]; lean: Perch[] };
 }
 
 export const DEFAULT_LAYOUT: LayoutConfig = {
@@ -46,6 +65,23 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   code: { x: -4.85, y: -1.35, w: 4.9, h: 5.4 },
   status: { x: 5.6, y: 2.06, w: 3.3, h: 3.88 },
   library: { x: 5.6, y: -2.06, w: 3.3, h: 3.88 },
+  companion: {
+    size: 1.1,
+    standoff: 0.3,
+    margin: 0.12,
+    perches: {
+      // Overhead, between the knob arc and the readouts; else the low crook
+      // between the code and the bottom of the arc.
+      neutral: [{ x: 2.5, y: 3.8 }, { x: -0.5, y: -3.7 }, { x: -1.0, y: 3.9 }],
+      // In the gutter on the turned-to side, above or below.
+      left: [{ x: -1.35, y: 3.5 }, { x: -0.9, y: -3.4 }],
+      right: [{ x: 2.55, y: 3.4 }, { x: 2.5, y: -3.2 }],
+      // Leaned in there is little room (it squeezes smaller to fit): the
+      // nooks beside the bezel's top and bottom right, and beyond the top of
+      // the knob arc.
+      lean: [{ x: 3.3, y: 2.8 }, { x: -1.8, y: 2.3 }, { x: 3.4, y: -2.4 }],
+    },
+  },
 };
 
 export const layout: LayoutConfig = structuredClone(DEFAULT_LAYOUT);

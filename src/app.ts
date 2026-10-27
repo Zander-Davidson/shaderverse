@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { EXAMPLES } from '../examples';
 import { layout, type LayoutConfig } from './cockpit/layout';
+import { Companion } from './companion/companion';
 import { Compositor } from './cockpit/compositor';
 import { Cockpit } from './cockpit/scene';
 import { KnobBank } from './knobs/knobs';
@@ -132,6 +133,10 @@ export function startApp(root: HTMLElement): void {
   router.add(status);
   router.add(library);
   for (const s of knobs.slots) router.add(s);
+  const companion = new Companion({ cockpit, cfg, canvas, store, runtime, knobs });
+  cockpit.scene.add(companion.body.mesh);
+  // It floats nearest the camera; picks off its body pass through its quad.
+  router.add(companion);
 
   // Overlays
   const overlayBounds = (): { code: ScreenRect; portal: ScreenRect } => {
@@ -222,6 +227,10 @@ export function startApp(root: HTMLElement): void {
         toast(`Quality: ${next}`);
         break;
       }
+      case 'c':
+      case 'C':
+        companion.setHidden(!companion.hidden);
+        break;
       case 'e':
       case 'E':
       case 'Enter':
@@ -303,6 +312,7 @@ export function startApp(root: HTMLElement): void {
     status.update();
     library.update();
     knobs.update(now / 1000);
+    companion.update(now, dt);
     compositor.render();
   };
   requestAnimationFrame(frame);
@@ -331,7 +341,7 @@ export function startApp(root: HTMLElement): void {
   // Handles for browser tests and debugging; not part of any public API.
   Object.assign(window, {
     __sv: {
-      store, runtime, router, cockpit, code, plot, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
+      store, runtime, router, cockpit, companion, code, plot, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
       knobPoint: (slot: number) => screenPoint(knobs.slots[slot]!.anchor(), cockpit.camera, canvas),
       bounds: overlayBounds,
       /** Screen point of a source offset on the curved code panel. */

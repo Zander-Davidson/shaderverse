@@ -6,6 +6,7 @@ const SHORTCUTS: [string, string][] = [
   ['Q', 'Cycle render quality'],
   ['E or Enter', 'Open the editor'],
   ['1 – 9', 'New project from example'],
+  ['C', 'Hide or bring back the companion'],
   ['? or H', 'Show this list'],
   ['Editor: ⌘/Ctrl K', 'Turn the selected number into a knob'],
   ['Editor: Esc', 'Close the editor'],
