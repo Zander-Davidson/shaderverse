@@ -3,7 +3,7 @@
 // watches the user, the cursor, the portal or the knob that just moved.
 
 import * as THREE from 'three';
-import { bezelRadius, type LayoutConfig } from '../cockpit/layout';
+import type { LayoutConfig } from '../cockpit/layout';
 import { knobWorld } from '../console/plan';
 import type { CameraView, Cockpit } from '../cockpit/scene';
 import type { KnobBank } from '../knobs/knobs';
@@ -34,6 +34,8 @@ const HIDDEN_KEY = 'shaderverse.companion.hidden';
 const RECHECK_S = 0.25;
 /** Scales it tries, largest first, when no perch fits at full size. */
 const SQUEEZE = [1, 0.85, 0.7];
+/** Turned to a side, how much of the portal's radius the companion keeps clear of. */
+const SIDE_RIM = 0.85;
 /** Overlays the companion keeps clear of while they show. */
 const OVERLAYS = '.sv-popover, .sv-editor, .sv-knob-button, .sv-help-box';
 
@@ -337,30 +339,26 @@ export class Companion implements PointerTarget {
         (c.size * wallToWorld(p.x, p.y, cfg.radius, 0, wall).distanceTo(cam.position)) /
         cfg.eyeDistance,
     );
-    const zones = this.keepOut(cam);
-    let margin = 0;
-    let sizes = full;
-    // Where nothing fits (leaned in, a narrow window) it squeezes smaller
-    // before falling back to peeking in from an edge.
-    for (const squeeze of SQUEEZE) {
-      const scaled = full.map((s) => s * squeeze);
-      const candidates: Circle[] = perches.map((p, i) => {
+    const zones = this.keepOut(cam, view);
+    // Where a perch is a little tight (leaned in, a narrow window) it
+    // squeezes smaller there before trying the next one, and only when none
+    // fits at any size does it peek in from an edge.
+    const candidates: Circle[] = perches.flatMap((p, i) =>
+      SQUEEZE.map((squeeze) => {
         const s = this.screen(wallToWorld(p.x, p.y, cfg.radius, 0, wall), cam);
-        const e = this.screen(wallToWorld(p.x + scaled[i]! / 2, p.y, cfg.radius, 0, wall), cam);
+        const e = this.screen(wallToWorld(p.x + (full[i]! * squeeze) / 2, p.y, cfg.radius, 0, wall), cam);
         return { x: s.x, y: s.y, r: Math.hypot(e.x - s.x, e.y - s.y) * 1.05 };
-      });
-      if (!margin) margin = (c.margin / (c.size / 2)) * (candidates[0]?.r ?? 40);
-      const choice = choosePerch(candidates, zones, W, H, margin);
-      if (choice.index >= 0 || squeeze === SQUEEZE[0]) {
-        this.perch = choice;
-        sizes = scaled;
-      }
-      if (choice.index >= 0) break;
-    }
-    const perch = this.perch!;
+      }),
+    );
+    const margin = (c.margin / (c.size / 2)) * (candidates[0]?.r ?? 40);
+    const choice = choosePerch(candidates, zones, W, H, margin);
+    const k = Math.max(0, choice.index);
+    this.perch = { ...choice, index: choice.index < 0 ? -1 : Math.floor(k / SQUEEZE.length) };
+    const perch = this.perch;
     const i = Math.max(0, perch.index);
     const p = perches[i] ?? { x: 0, y: 0 };
-    this.goalRadius = ((sizes[i] ?? c.size) / 2) * (1 - c.standoff);
+    const squeeze = choice.index < 0 ? 1 : SQUEEZE[k % SQUEEZE.length]!;
+    this.goalRadius = (((full[i] ?? c.size) * squeeze) / 2) * (1 - c.standoff);
     this.goal.lerpVectors(wallToWorld(p.x, p.y, cfg.radius, 0, wall), cam.position, c.standoff);
     if (perch.index < 0) {
       // Off the list: the screen point at the same distance from the eye.
@@ -372,8 +370,12 @@ export class Companion implements PointerTarget {
     }
   }
 
-  /** Monitors, their arms, the bezel, knobs and open overlays, as seen from `cam`. */
-  keepOut(cam: THREE.Camera): KeepOut {
+  /**
+   * Monitors, their arms, the portal, knobs and open overlays, as seen from
+   * `cam`. Turned to a side, the monitors are what the eye is on, so the
+   * companion may tuck in over the rim of the view out the window.
+   */
+  keepOut(cam: THREE.Camera, cameraView: CameraView = 'neutral'): KeepOut {
     const { cfg, canvas } = this.deps;
     const R = cfg.radius;
     const p = new THREE.Vector3();
@@ -405,7 +407,10 @@ export class Companion implements PointerTarget {
       }
       boxes.push(b);
     }
-    const circles: Circle[] = [circle(cfg.portal.x, cfg.portal.y, bezelRadius(cfg))];
+    // The focal circle of the view out the window; nothing frames it now, so
+    // the companion may sit right up to its rim.
+    const rim = cameraView === 'left' || cameraView === 'right' ? SIDE_RIM : 1;
+    const circles: Circle[] = [circle(cfg.portal.x, cfg.portal.y, (cfg.portal.size / 2) * rim)];
     // The arms, as a chain of circles down each one, where they're in front of the camera.
     for (const a of allArmPoints(cfg)) {
       const shoulder = a.mount.clone().add(new THREE.Vector3(0, -0.3, 0));
