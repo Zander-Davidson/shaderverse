@@ -278,16 +278,58 @@ export class Cockpit {
       right: { monitors: [cfg.status, cfg.library], closer: 0.17 },
     };
     const look = this.base.target.distanceTo(this.base.eye);
+    const cam = new THREE.PerspectiveCamera(this.baseFov * (1 - FOCUS_ZOOM), this.camera.aspect);
+    const v = new THREE.Vector3();
     for (const [name, { monitors, closer }] of Object.entries(groups)) {
       const side = this.sides[name as 'left' | 'right'];
       const center = new THREE.Vector3();
       for (const m of monitors) center.add(monitorCenter(cfg, m));
       center.divideScalar(monitors.length);
-      // The gaze turns nearly half the way toward them, at the wall's distance.
-      const dir = center.clone().sub(this.base.eye).normalize();
-      const ahead = this.base.target.clone().sub(this.base.eye).normalize();
-      side.pose.target.copy(this.base.eye).addScaledVector(ahead.lerp(dir, 0.46).normalize(), look);
-      side.pose.eye.lerpVectors(this.base.eye, center, closer);
+      const corners = monitors.flatMap((m) => monitorCorners(cfg, m));
+      // From an eye, the gaze turns nearly half the way toward them across,
+      // and tips to the middle of their height, so neither the top nor the
+      // bottom monitor is cut.
+      const aim = (eye: THREE.Vector3, out: THREE.Vector3) => {
+        const dir = center.clone().sub(eye).normalize();
+        const ahead = this.base.target.clone().sub(eye).normalize();
+        const gaze = ahead.lerp(dir, 0.46).normalize();
+        const yaw = Math.atan2(gaze.x, gaze.z);
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (const c of corners) {
+          const d = v.copy(c).sub(eye);
+          const pitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
+          lo = Math.min(lo, pitch);
+          hi = Math.max(hi, pitch);
+        }
+        const pitch = (lo + hi) / 2;
+        return out.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).multiplyScalar(look).add(eye);
+      };
+      // As close as `closer` allows while every corner, with a margin,
+      // stays in the narrowed view.
+      const fits = (eye: THREE.Vector3) => {
+        cam.position.copy(eye);
+        cam.up.set(side.dir * 0.01, 1, 0).normalize();
+        cam.lookAt(aim(eye, v.clone()));
+        cam.updateMatrixWorld();
+        const tanV = Math.tan(((cam.fov / 2) * Math.PI) / 180) / 1.04;
+        for (const c of corners) {
+          const p = v.copy(c).applyMatrix4(cam.matrixWorldInverse);
+          const depth = -p.z;
+          if (depth <= 0 || Math.abs(p.y) / depth > tanV || Math.abs(p.x) / depth > tanV * cam.aspect) return false;
+        }
+        return true;
+      };
+      const eye = new THREE.Vector3();
+      let lo = 0;
+      let hi = closer;
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(eye.lerpVectors(this.base.eye, center, mid))) lo = mid;
+        else hi = mid;
+      }
+      side.pose.eye.lerpVectors(this.base.eye, center, lo);
+      aim(side.pose.eye, side.pose.target);
     }
   }
 

@@ -167,11 +167,10 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
     perches: {
       // Overhead, beside the top of the portal; else under the knob row.
       neutral: [{ x: 3.5, y: 5.0 }, { x: -2.5, y: 5.0 }, { x: 2.0, y: -6.5 }],
-      // On the turned-to side, up high: the turn leaves no room lower down
-      // between the near monitors and the portal, and the plot's arm fills
-      // the gap above it on the left.
-      left: [{ x: -5.5, y: 6.0 }, { x: -6.5, y: 6.0 }],
-      right: [{ x: 3.5, y: 5.5 }, { x: -4.5, y: 3.5 }],
+      // Low in the window between the turned-to monitors and the portal,
+      // above the console; else up high on that side.
+      left: [{ x: -2.4, y: -3.0 }, { x: -5.5, y: 6.0 }, { x: -6.5, y: 6.0 }],
+      right: [{ x: 3.35, y: -2.8 }, { x: 3.5, y: 5.5 }, { x: -4.5, y: 3.5 }],
       // Leaned in: beside the bezel, left or right of the portal.
       lean: [{ x: 6.0, y: 1.0 }, { x: -6.0, y: 1.0 }, { x: 6.0, y: -3.0 }],
     },
