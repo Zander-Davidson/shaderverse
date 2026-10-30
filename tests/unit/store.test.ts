@@ -157,6 +157,22 @@ describe('control board state', () => {
     expect(s.getState().dispatch({ type: 'editKnob', id: a! }).ok).toBe(false);
   });
 
+  it('a new knob turns the BAKE key back to OFF', () => {
+    const s = two();
+    s.getState().dispatch({ type: 'setBakeArmed', armed: true });
+    s.getState().dispatch({ type: 'bakeAllKnobs' });
+    expect(s.getState().ui.bakeArmed).toBe(true);
+    // Undo the bake: the knobs come back.
+    s.getState().dispatch({ type: 'setSource', source: WITH(', in float a, in float b').replace('0.5, 0.25', 'a, b') });
+    expect(s.getState().project.knobs).toHaveLength(2);
+    expect(s.getState().ui.bakeArmed).toBe(false);
+
+    s.getState().dispatch({ type: 'setBakeArmed', armed: true });
+    const src = WITH(', in float a, in float b, in float blue').replace('0.5, 0.25, 2.0', 'a, b, blue');
+    s.getState().dispatch({ type: 'createKnob', source: src, param: 'blue', knobType: 'float', value: 2 });
+    expect(s.getState().ui.bakeArmed).toBe(false);
+  });
+
   it('bakeAllKnobs is refused unless armed', () => {
     const s = two();
     const before = s.getState().project.source;

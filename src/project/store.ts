@@ -260,12 +260,16 @@ export function createProjectStore(initial: Project) {
       log: [],
       setCompile: (compile) => set({ compile }),
       dispatch: (action, actor = 'user') => {
+        const before = new Set(get().project.knobs.map((k) => k.id));
         const result = reduce(action);
         if (!result.ok) return result;
         // Edit mode ends with its knob, however the knob went (a bake, an
         // edit or undo in the source).
         const { ui, project } = get();
         if (ui.editKnobId && !project.knobs.some((k) => k.id === ui.editKnobId)) set({ ui: { ...ui, editKnobId: null } });
+        // A new knob, however it came (made from a literal, typed into the
+        // signature, undo), turns the BAKE key back to OFF.
+        if (get().ui.bakeArmed && project.knobs.some((k) => !before.has(k.id))) set({ ui: { ...get().ui, bakeArmed: false } });
         const entry: LogEntry = { action, actor, at: new Date().toISOString() };
         const log = get().log;
         const last = log[log.length - 1];

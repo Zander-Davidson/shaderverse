@@ -327,6 +327,8 @@ export class BakeKey implements PointerTarget {
   readonly group = new THREE.Group();
   /** Turns about the face normal: 0 at OFF, a quarter turn clockwise at ARM. */
   readonly key = new THREE.Group();
+  /** The key itself, above the plug: what a press pushes in. */
+  private readonly head = new THREE.Group();
   readonly charm = new THREE.Group();
   private readonly body: THREE.Mesh;
   pixelWidth = 1;
@@ -358,12 +360,19 @@ export class BakeKey implements PointerTarget {
     collar.position.z = 0.02;
     const body = (this.body = new THREE.Mesh(new THREE.CylinderGeometry(k.r, k.r * 1.04, 0.07, 40).rotateX(Math.PI / 2), mats.chrome));
     body.position.z = 0.035;
-    const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.05, k.r * 1.1), mats.seam);
-    slot.position.z = 0.071;
-    // The key: a short shank into the slot and a flat, chunky bow with a ring hole.
+    // The plug: the lock's turning core, with the keyway cut across it. It
+    // turns with the key, so the slot shows where the key points.
+    const plug = new THREE.Mesh(new THREE.CylinderGeometry(k.r * 0.74, k.r * 0.74, 0.014, 40).rotateX(Math.PI / 2), chromeMaterial({ roughness: 0.22 }));
+    plug.position.z = 0.077;
+    const plugSeam = new THREE.Mesh(new THREE.RingGeometry(k.r * 0.74, k.r * 0.79, 40), mats.seam);
+    plugSeam.position.z = 0.0712;
+    const slot = new THREE.Mesh(new THREE.PlaneGeometry(k.r * 1.15, 0.045), mats.seam);
+    slot.position.z = 0.0845;
+    // The key: a neck down into the keyway and a flat, chunky bow with a ring
+    // hole, all in the one plane the slot runs along.
     const keyMat = physicalMaterial({ color: '#c9a64b', metalness: 1, roughness: 0.25, clearcoat: 0.5 });
-    const shank = new THREE.Mesh(new THREE.BoxGeometry(0.035, k.r * 0.9, 0.08), keyMat);
-    shank.position.z = 0.1;
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(k.r * 0.8, 0.03, 0.07), keyMat);
+    neck.position.z = 0.115;
     const bowShape = roundedRect(new THREE.Shape(), 0.3, 0.34, 0.1) as THREE.Shape;
     bowShape.holes.push(new THREE.Path().absarc(0.08, 0.07, 0.035, 0, Math.PI * 2, true));
     const bow = new THREE.Mesh(
@@ -373,8 +382,9 @@ export class BakeKey implements PointerTarget {
     // Stands up out of the face, its flat side toward the pilot.
     bow.rotation.x = Math.PI / 2;
     bow.position.set(0, 0.015, 0.31);
-    this.key.add(shank, bow);
-    this.group.add(collar, body, slot, this.key, this.charm);
+    this.head.add(neck, bow);
+    this.key.add(plug, slot, this.head);
+    this.group.add(collar, body, plugSeam, this.key, this.charm);
     this.buildCharm(mats);
     // Hanging straight down the face to start.
     this.ringPoint(this.end).add(new THREE.Vector3(0, -CHAIN, -0.1));
@@ -384,7 +394,7 @@ export class BakeKey implements PointerTarget {
     this.endPrev.copy(this.end);
     this.ballPrev.copy(this.ball);
     this.charm.traverse((o) => (o.raycast = () => {}));
-    for (const m of [collar, slot]) m.raycast = () => {};
+    for (const m of [collar, plugSeam, slot]) m.raycast = () => {};
   }
 
   get meshes(): THREE.Object3D[] {
@@ -542,7 +552,7 @@ export class BakeKey implements PointerTarget {
 
   private setPressed(p: boolean) {
     this.pressed = p;
-    this.key.position.z = p ? -0.012 : 0;
+    this.head.position.z = p ? -0.012 : 0;
     redraw(this.group);
   }
 
