@@ -55,6 +55,8 @@ const materials = () => ({
     transparent: true,
     opacity: 0.32,
     depthWrite: false,
+    // Flipped open, a dome shows its hollow side.
+    side: THREE.DoubleSide,
   }),
   seam: new THREE.MeshBasicMaterial({ color: '#05080a' }),
 });
@@ -87,9 +89,6 @@ function seam(r: number, mats: Mats): THREE.Mesh {
   return m;
 }
 
-const easeOut = (t: number) => 1 - (1 - t) ** 3;
-/** How long a knob's bubble takes to slide away, or back. */
-const BUBBLE_S = 0.25;
 /** How far a pressed button travels. */
 const PRESS = 0.018;
 
@@ -102,17 +101,19 @@ function redButton(r: number, h: number, mats: Mats): THREE.Mesh {
 
 /**
  * One knob's bake bubble: its well, the red button in it, and the dome over
- * it. While its knob is in edit mode the dome slides down and back under the
- * face, and the button it uncovers bakes the knob. Only the exposed button
- * takes the pointer; the bubble never looks clickable.
+ * it, hinged at its back edge like the bake all button's guard. While its
+ * knob is in edit mode the dome flips up and the button it uncovers bakes the
+ * knob. Only the exposed button takes the pointer; the bubble never looks
+ * clickable.
  */
 export class BakeBubble implements PointerTarget {
   readonly group = new THREE.Group();
   readonly button: THREE.Mesh;
-  readonly dome: THREE.Mesh;
+  /** Pivots on the dome's back (far) edge. */
+  readonly guard = new THREE.Group();
   pixelWidth = 1;
   pixelHeight = 1;
-  /** 0 covered, 1 slid away. */
+  /** 0 covered, 1 flipped open. */
   private open = 0;
   private goal = 0;
   private pressed = false;
@@ -131,8 +132,14 @@ export class BakeBubble implements PointerTarget {
     // Its own material, so it can light up when uncovered.
     this.button.material = (this.button.material as THREE.MeshPhysicalMaterial).clone();
     this.rest = this.button.position.z = -WELL_DEPTH + 0.025;
-    this.dome = bubble(FACE_HOLES.bubble * 1.02, BUBBLE_R * 0.85, mats);
-    this.group.add(this.button, this.dome);
+    const r = FACE_HOLES.bubble * 1.02;
+    const dome = bubble(r, BUBBLE_R * 0.85, mats);
+    dome.position.y = -r;
+    this.guard.position.y = r;
+    this.guard.add(dome);
+    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, r * 0.9, 12).rotateZ(Math.PI / 2), mats.chrome);
+    hinge.position.set(0, r + 0.006, 0.01);
+    this.group.add(this.button, this.guard, hinge);
     this.group.traverse((o) => (o.raycast = () => {}));
     this.button.raycast = THREE.Mesh.prototype.raycast;
   }
@@ -143,25 +150,39 @@ export class BakeBubble implements PointerTarget {
 
   /** Whether the button is uncovered, so it can be pressed. */
   get exposed(): boolean {
-    return this.goal === 1 && this.open > 0.9;
+    // Pressable once the dome is up, while it still springs.
+    return this.goal === 1 && this.open > 0.4;
   }
+
+  /** Where a closing dome starts from, so it eases down from wherever the spring had it. */
+  private closeFrom = 0;
 
   /** Uncovers the button (its knob is in edit mode), or covers it again. */
   setOpen(open: boolean) {
-    this.goal = open ? 1 : 0;
-    if (!open) this.setPressed(false);
+    const goal = open ? 1 : 0;
+    if (goal === this.goal) return;
+    this.goal = goal;
+    if (!open) {
+      this.setPressed(false);
+      this.closeFrom = this.guard.rotation.x;
+    }
   }
 
-  /** Advances the slide; true while it moves. */
+  /** Advances the flip; true while it moves. */
   tick(dt: number): boolean {
     if (this.open === this.goal) return false;
-    this.open = this.goal > this.open ? Math.min(1, this.open + dt / BUBBLE_S) : Math.max(0, this.open - dt / BUBBLE_S);
-    // Down into the well and back under the face, toward the console's far edge.
-    const t = easeOut(this.goal ? this.open : 1 - this.open);
-    const k = this.goal ? t : 1 - t;
-    const r = FACE_HOLES.bubble;
-    this.dome.position.set(0, k * r * 2.3, -k * BUBBLE_R * 1.1);
-    this.dome.visible = k < 0.999;
+    if (this.goal) {
+      // Spring-loaded: it snaps up past open, then settles back.
+      this.open = Math.min(1, this.open + dt / SPRING_S);
+      const t = this.open;
+      this.guard.rotation.x = -GUARD_OPEN * (t >= 1 ? 1 : 1 - Math.exp(-6 * t) * Math.cos(14 * t));
+    } else {
+      // Down as the bake all guard closes, eased.
+      this.open = Math.max(0, this.open - dt / GUARD_S);
+      const t = this.open;
+      this.guard.rotation.x = this.closeFrom * t * t * (3 - 2 * t);
+    }
+    const k = this.goal ? Math.min(1, this.open * 2) : this.open;
     // Uncovered, the button stands up in a shallow well, faintly lit.
     this.lift = k * (WELL_DEPTH - 0.035);
     this.button.position.z = this.rest + this.lift - (this.pressed ? PRESS : 0);
@@ -264,9 +285,7 @@ export class BakeAllButton implements PointerTarget {
     const goal = this.armed ? 1 : 0;
     if (this.open === goal) return false;
     this.open = goal > this.open ? Math.min(1, this.open + dt / GUARD_S) : Math.max(0, this.open - dt / GUARD_S);
-    // Swings up and back on its hinge, past upright.
-    const t = this.open;
-    this.guard.rotation.x = -GUARD_OPEN * t * t * (3 - 2 * t);
+    this.guard.rotation.x = guardAngle(this.open);
     redraw(this.group);
     return true;
   }
@@ -302,8 +321,13 @@ export class BakeAllButton implements PointerTarget {
 /** How long the key takes to turn, and the guard to swing. */
 const TURN_S = 0.3;
 const GUARD_S = 0.35;
-/** How far the guard swings open: a little past upright. */
+/** How long a knob's bubble takes to spring open and settle. */
+const SPRING_S = 0.55;
+/** How far a guard swings open: a little past upright. */
 const GUARD_OPEN = 1.95;
+
+/** A guard's angle on its hinge, `open` of the way: up and back, easing in and out. */
+const guardAngle = (open: number) => -GUARD_OPEN * open * open * (3 - 2 * open);
 
 /** Eases out past the end and settles back, like a detent. */
 const easeOutBack = (t: number) => 1 + 2.4 * (t - 1) ** 3 + 1.4 * (t - 1) ** 2;
