@@ -18,7 +18,9 @@ import { chromeMaterial } from '../style/console';
 import { physicalMaterial } from '../style/quality';
 import { COLORS, MONO } from '../theme';
 import type { KnobBank } from '../knobs/knobs';
-import { BUTTON_Y, CAPTION_Y, consoleControls, KNOB_Y, LEGEND_Y, SECTIONS, type Control } from './plan';
+import { KNOB_SLOTS } from '../project/schema';
+import { buildBoard, FACE_HOLES } from './board';
+import { BAKE_ALL, BAKE_KEY, BUBBLE_Y, BUTTON_Y, CAPTION_Y, consoleControls, KNOB_Y, knobLocal, LEGEND_Y, ROW_X, SECTIONS, type Control } from './plan';
 
 const PX_PER_UNIT = 220;
 const BEZEL = Math.round(0.16 * PX_PER_UNIT);
@@ -155,6 +157,7 @@ class ConsoleControl implements PointerTarget {
 
 export class ConsolePanel extends MonitorPanel {
   readonly controls: ConsoleControl[];
+  readonly board = buildBoard(KNOB_SLOTS);
 
   constructor(
     cfg: LayoutConfig,
@@ -177,11 +180,18 @@ export class ConsolePanel extends MonitorPanel {
       this.rig.add(ctl.group);
       ctl.onPress = () => this.press(ctl);
     }
+    const b = this.board;
+    this.rig.add(b.display.group, b.bakeAll.group, b.key.group, ...b.bubbles.map((x) => x.group));
     this.syncLights();
     store.subscribe((s, p) => {
       if (s.project.playback !== p.project.playback || s.compile !== p.compile) this.syncLights();
     });
     void document.fonts?.ready.then(() => this.invalidate());
+  }
+
+  override update(): void {
+    super.update();
+    this.board.display.update();
   }
 
   /** The controls that take the pointer (lamps don't). */
@@ -250,12 +260,47 @@ export class ConsolePanel extends MonitorPanel {
     }
     ctx.globalAlpha = 1;
 
-    // Engraved groove between the knob row and the controls.
-    const groove = py(-0.13);
-    ctx.fillStyle = '#07090a';
-    ctx.fillRect(px(-3.35), groove - 2, px(3.35) - px(-3.35), 4);
-    ctx.fillStyle = '#2c3438';
-    ctx.fillRect(px(-3.35), groove + 2, px(3.35) - px(-3.35), 1);
+    // The left bay: a shadowed apron around the edit display's recess.
+    const d = FACE_HOLES.display;
+    ctx.beginPath();
+    ctx.roundRect(px(d.x - d.w / 2 - d.rim - 0.05), py(d.y + d.h / 2 + d.rim + 0.05), (d.w + 2 * d.rim + 0.1) * PX_PER_UNIT, (d.h + 2 * d.rim + 0.1) * PX_PER_UNIT, (d.r + d.rim + 0.05) * PX_PER_UNIT);
+    ctx.fillStyle = '#0b0e10';
+    ctx.fill();
+    ctx.font = `700 22px ${MONO}`;
+    ctx.fillStyle = COLORS.dim;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.fillText('KNOB EDIT', px(d.x), py(LEGEND_Y));
+    // A seam ring around each bubble's well.
+    for (let i = 0; i < KNOB_SLOTS; i++) {
+      ctx.beginPath();
+      ctx.arc(px(knobLocal(i)[0]), py(BUBBLE_Y), (FACE_HOLES.bubble + 0.03) * PX_PER_UNIT, 0, Math.PI * 2);
+      ctx.fillStyle = '#0a0d0e';
+      ctx.fill();
+    }
+    // The right bay: the bake all button's guard plate, and the key's
+    // engraving with OFF and ARM ticks either side of the slot.
+    ctx.beginPath();
+    ctx.arc(px(BAKE_ALL.x), py(BAKE_ALL.y), (FACE_HOLES.bakeAll + 0.07) * PX_PER_UNIT, 0, Math.PI * 2);
+    ctx.fillStyle = '#0a0d0e';
+    ctx.fill();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#3a2d10';
+    ctx.setLineDash([18, 12]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.textAlign = 'center';
+    ctx.font = `800 30px ${MONO}`;
+    ctx.fillStyle = '#8b98a0';
+    ctx.fillText('BAKE', px(BAKE_KEY.x), py(BAKE_KEY.y + BAKE_KEY.r + 0.33));
+    ctx.font = `700 18px ${MONO}`;
+    ctx.fillStyle = COLORS.dim;
+    const kr = BAKE_KEY.r + 0.12;
+    ctx.fillText('OFF', px(BAKE_KEY.x), py(BAKE_KEY.y + kr + 0.01) - 2);
+    ctx.fillText('ARM', px(BAKE_KEY.x + kr + 0.13), py(BAKE_KEY.y));
+    ctx.fillStyle = '#5a6a72';
+    ctx.fillRect(px(BAKE_KEY.x) - 2, py(BAKE_KEY.y + kr - 0.05), 4, 0.07 * PX_PER_UNIT);
+    ctx.fillRect(px(BAKE_KEY.x + kr - 0.05), py(BAKE_KEY.y) - 2, 0.07 * PX_PER_UNIT, 4);
 
     // Under each button, toggle and lamp, a dark socket.
     for (const c of consoleControls()) {
@@ -268,7 +313,7 @@ export class ConsolePanel extends MonitorPanel {
     }
     // A tray under the keys.
     ctx.beginPath();
-    ctx.roundRect(px(1.22), py(BUTTON_Y + 0.29), px(3.32) - px(1.22), 0.58 * PX_PER_UNIT, 12);
+    ctx.roundRect(px(ROW_X + 1.22), py(BUTTON_Y + 0.29), px(ROW_X + 3.32) - px(ROW_X + 1.22), 0.58 * PX_PER_UNIT, 12);
     ctx.fillStyle = '#07090a';
     ctx.fill();
 
@@ -292,9 +337,22 @@ export class ConsolePanel extends MonitorPanel {
     ctx.font = `600 20px ${MONO}`;
     ctx.fillStyle = '#4a5a60';
     ctx.textAlign = 'right';
-    ctx.fillText('SHADERVERSE · CONTROL C/7', px(3.3), py(LEGEND_Y));
+    ctx.fillText('SHADERVERSE · CONTROL C/7', px(ROW_X + 3.3), py(LEGEND_Y));
     ctx.textAlign = 'left';
-    ctx.fillText('PARAM', px(-3.35), py(KNOB_Y + 0.45));
+    ctx.fillText('PARAM', px(ROW_X - 3.35), py(KNOB_Y + 0.45));
     this.shape!.finish(ctx, '#0a0d0e');
+    // Open the face where the display, the bubbles and the bake all button
+    // sink below it (transparent pixels are discarded, so the wells show).
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.roundRect(px(d.x - d.w / 2), py(d.y + d.h / 2), d.w * PX_PER_UNIT, d.h * PX_PER_UNIT, d.r * PX_PER_UNIT);
+    for (let i = 0; i < KNOB_SLOTS; i++) {
+      ctx.moveTo(px(knobLocal(i)[0]) + FACE_HOLES.bubble * PX_PER_UNIT, py(BUBBLE_Y));
+      ctx.arc(px(knobLocal(i)[0]), py(BUBBLE_Y), FACE_HOLES.bubble * PX_PER_UNIT, 0, Math.PI * 2);
+    }
+    ctx.moveTo(px(BAKE_ALL.x) + FACE_HOLES.bakeAll * PX_PER_UNIT, py(BAKE_ALL.y));
+    ctx.arc(px(BAKE_ALL.x), py(BAKE_ALL.y), FACE_HOLES.bakeAll * PX_PER_UNIT, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
   }
 }

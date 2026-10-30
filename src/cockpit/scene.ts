@@ -6,7 +6,7 @@ import { cockpitEnvironment, glassEnvironment } from './environment';
 import { LOW_GFX } from '../style/quality';
 import { wallToWorld } from '../panels/patch';
 import { bezelRadius, type LayoutConfig } from './layout';
-import { consolePoint, KNOB_FACE, KNOB_STRIP, knobLocal } from '../console/plan';
+import { BAKE_ALL, consolePoint, EDIT_DISPLAY, KNOB_FACE, KNOB_STRIP, knobLocal } from '../console/plan';
 import { monitorCenter, monitorCorners } from './rig';
 import { KNOB_SLOTS } from '../project/schema';
 
@@ -211,6 +211,11 @@ export class Cockpit {
         knobs.push(consolePoint(cfg, x + (dx * KNOB_FACE) / 2, y + (dy > 0 ? KNOB_FACE / 2 : -KNOB_FACE / 2 - KNOB_STRIP), 0.15, undefined, 1));
       }
     }
+    // And the bays either side of the row: the edit display's outer edge and
+    // the bake all button.
+    const d = EDIT_DISPLAY;
+    for (const y of [d.y - d.h / 2, d.y + d.h / 2]) knobs.push(consolePoint(cfg, d.x - d.w / 2, y, 0.05, undefined, 1));
+    knobs.push(consolePoint(cfg, BAKE_ALL.x + BAKE_ALL.r * 1.4, BAKE_ALL.y, 0.15, undefined, 1));
     frame.push(...knobs);
     // Aim halfway, by angle, between the top of the bezel and the bottom of
     // the knob strips; come forward and down as far as everything still fits,

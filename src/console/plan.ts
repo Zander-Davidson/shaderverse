@@ -1,8 +1,10 @@
 // The hanging control console's face, laid out in its own panel units:
 // x right, y toward its far (top) edge, from its center. The top row holds
-// the eight knob slots, each with a label strip beneath it; below them one
-// row of square backlit buttons, lamps, toggles and keys. Pure, so it can be
-// tested and shared by the console, the camera and the companion.
+// the eight knob slots, each with a label strip and a bake bubble beneath
+// it; below them one row of square backlit buttons, lamps, toggles and keys.
+// A bay left of the knobs holds the knob edit display, one right of them the
+// BAKE key and the bake all button (docs/control-board.md). Pure, so it can
+// be tested and shared by the console, the camera and the companion.
 
 import * as THREE from 'three';
 import type { LayoutConfig } from '../cockpit/layout';
@@ -19,10 +21,29 @@ export const KNOB_Y = 0.74;
 /** How far a knob's cap sits off the face, in panel units. */
 export const KNOB_LIFT = 0.012;
 
+/**
+ * The middle of the knob row, right of the console's center: the left bay is
+ * wider than the right one. Everything on the face below is laid out around
+ * the row and shifted by this.
+ */
+export const ROW_X = 0.45;
+
 /** Center of knob slot `i`, left to right. */
 export function knobLocal(i: number): [number, number] {
-  return [(i - (KNOB_SLOTS - 1) / 2) * KNOB_PITCH, KNOB_Y];
+  return [ROW_X + (i - (KNOB_SLOTS - 1) / 2) * KNOB_PITCH, KNOB_Y];
 }
+
+/** Where each knob's bake bubble sits: under its label strip, above the captions. */
+export const BUBBLE_Y = -0.19;
+/** Radius of a knob's bake bubble, and of the button under it. */
+export const BUBBLE_R = 0.085;
+
+/** The knob edit display's glass, recessed into the left bay: center and size. */
+export const EDIT_DISPLAY = { x: ROW_X - 4.47, y: 0.16, w: 1.78, h: 1.92 };
+
+/** The right bay: the BAKE key level with the controls, the bake all button over it. */
+export const BAKE_KEY = { x: ROW_X + 3.98, y: -0.68, r: 0.2 };
+export const BAKE_ALL = { x: ROW_X + 3.98, y: KNOB_Y - 0.02, r: 0.25 };
 
 /** What a console control does when pressed; decorative ones only animate. */
 export type ControlAction = 'play' | 'restart' | 'quality:low' | 'quality:medium' | 'quality:high' | null;
@@ -41,10 +62,10 @@ export interface Control {
 }
 
 /** Row centers of the lower section: the controls, and the legends under them. */
-export const BUTTON_Y = -0.56;
-export const LEGEND_Y = -0.97;
-/** Where the section captions sit, between the knob strips and the controls. */
-export const CAPTION_Y = -0.25;
+export const BUTTON_Y = -0.68;
+export const LEGEND_Y = -1.08;
+/** Where the section captions sit, between the bake bubbles and the controls. */
+export const CAPTION_Y = -0.38;
 
 /** Section captions over groups of controls: text, left edge and right end of its rule. */
 export const SECTIONS: { text: string; x: number; end: number }[] = [
@@ -52,10 +73,11 @@ export const SECTIONS: { text: string; x: number; end: number }[] = [
   { text: 'QUALITY', x: -1.98, end: -0.42 },
   { text: 'SYS', x: -0.25, end: 1.1 },
   { text: 'AUX', x: 1.22, end: 3.3 },
-];
+].map((s) => ({ ...s, x: s.x + ROW_X, end: s.end + ROW_X }));
 
 export function consoleControls(): Control[] {
   const b = (id: string, x: number, legend: string, action: ControlAction): Control => ({ id, kind: 'button', x, y: BUTTON_Y, w: 0.46, h: 0.46, legend, action });
+  // Laid out around the knob row's middle, then shifted with it.
   const controls: Control[] = [
     b('play', -3.05, 'PLAY', 'play'),
     b('restart', -2.48, 'RESTART', 'restart'),
@@ -71,6 +93,7 @@ export function consoleControls(): Control[] {
   for (let i = 0; i < 7; i++) {
     controls.push({ id: `key-${i}`, kind: 'key', x: 1.4 + i * 0.29 + (i > 4 ? 0.06 : 0), y: BUTTON_Y, w: 0.25, h: 0.44, legend: '', action: null });
   }
+  for (const c of controls) c.x += ROW_X;
   return controls;
 }
 
