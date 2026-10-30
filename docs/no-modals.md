@@ -156,8 +156,8 @@ pieces float over the scene. Each one has a planned home:
 
 | Today | Problem | Planned home |
 |---|---|---|
-| Knob popover (`src/overlays/popover.ts`) | A flat form floating beside the knob | The knob edit display on the console ([control board](control-board.md)) |
-| Knob right-click | Opens the popover, behaving like a context menu | Removed; a left click enters knob edit mode |
+| Knob popover (was `src/overlays/popover.ts`) | A flat form floating beside the knob | Done: the knob edit display on the console ([control board](control-board.md)) |
+| Knob right-click | Opened the popover, behaving like a context menu | Done: removed; a left click enters knob edit mode |
 | Help overlay (`? KEYS`, `src/overlays/help.ts`) | A full-screen box | A **KEYS** page on the library monitor, through the same transition |
 | Toasts (`toast()` in `src/overlays/help.ts`) | Notices that pop up over the scene | A message line on the status monitor, which holds the latest notice for a few seconds and fades it |
 | Flat editor overlay (`?editor=overlay`) | A flat window over the code display | Already replaced by the in-scene editor by default; the flag stays as a fallback for debugging only |

@@ -187,11 +187,16 @@ export class ConsolePanel extends MonitorPanel {
     const b = this.board;
     this.rig.add(b.display.group, b.bakeAll.group, b.key.group, ...b.bubbles.map((x) => x.group));
     for (const bubble of b.bubbles) bubble.onPress = () => this.bake(bubble.slot);
+    b.key.onTurn = () => store.getState().dispatch({ type: 'setBakeArmed', armed: !store.getState().ui.bakeArmed });
+    b.bakeAll.onPress = () => {
+      const r = store.getState().dispatch({ type: 'bakeAllKnobs' });
+      if (!r.ok) b.display.screen.showError(r.error);
+    };
     this.syncLights();
     this.syncBoard();
     store.subscribe((s, p) => {
       if (s.project.playback !== p.project.playback || s.compile !== p.compile) this.syncLights();
-      if (s.ui.editKnobId !== p.ui.editKnobId || s.project.knobs !== p.project.knobs) this.syncBoard();
+      if (s.ui.editKnobId !== p.ui.editKnobId || s.ui.bakeArmed !== p.ui.bakeArmed || s.project.knobs !== p.project.knobs) this.syncBoard();
     });
     void document.fonts?.ready.then(() => this.invalidate());
   }
@@ -202,21 +207,30 @@ export class ConsolePanel extends MonitorPanel {
     const now = performance.now();
     const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
     this.last = now;
-    for (const b of this.board.bubbles) b.tick(dt);
+    const b = this.board;
+    for (const x of b.bubbles) x.tick(dt);
+    b.key.tick(dt);
+    b.bakeAll.tick(dt);
     super.update();
     this.board.display.screen.update();
   }
 
   /** Every pointer target on the board: the display and the bake buttons. */
   get boardTargets(): PointerTarget[] {
-    return [this.board.display.screen, ...this.board.bubbles];
+    const b = this.board;
+    return [b.display.screen, ...b.bubbles, b.key, b.bakeAll];
   }
 
-  /** The bubble under the knob in edit mode slides away from its button. */
+  /**
+   * The bubble under the knob in edit mode slides away from its button; the
+   * BAKE key turns with the store, opening the bake all guard.
+   */
   private syncBoard() {
     const { project, ui } = this.store.getState();
     const slot = project.knobs.find((k) => k.id === ui.editKnobId)?.slot ?? -1;
     for (const b of this.board.bubbles) b.setOpen(b.slot === slot);
+    this.board.key.setArmed(ui.bakeArmed);
+    this.board.bakeAll.set(ui.bakeArmed, project.knobs.length > 0);
   }
 
   /** A knob's bake button: its value goes into the code and the knob is gone. */

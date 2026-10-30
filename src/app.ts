@@ -402,6 +402,9 @@ export function startApp(root: HTMLElement): void {
       },
       /** Screen point of knob slot `slot`'s bake button. */
       bakePoint: (slot: number) => screenPoint(controls.board.bubbles[slot]!.button.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas),
+      /** Screen points of the BAKE key's bow and the bake all button. */
+      bakeKeyPoint: () => screenPoint(controls.board.key.key.children[1]!.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas),
+      bakeAllPoint: () => screenPoint(controls.board.bakeAll.button.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas),
       /** Screen point of a field (or RESET VALUE) on the knob edit display. */
       displayPoint: (id: string) => screenPoint(controls.board.display.screen.pointOf(id as 'label'), cockpit.camera, canvas),
       bounds: overlayBounds,
