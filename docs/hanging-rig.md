@@ -207,8 +207,8 @@ hangs below the portal on screen.
     with one slot for each of the eight knobs (`KNOB_SLOTS`). An empty
     slot shows as a dark, recessed socket. A filled slot holds a knob
     that behaves exactly as today: drag vertically, modifier for fine
-    control, double-click to reset, and the flat popover for label,
-    range and step, anchored to the knob.
+    control, double-click to reset. (The flat popover for label, range
+    and step is replaced by the [control board](control-board.md).)
 -   **The rest: buttons and keys.** Below the knob row, the console is
     filled with smaller controls: rows of keys, square backlit push
     buttons, a few toggles and indicator lamps, in the spirit of the EVA

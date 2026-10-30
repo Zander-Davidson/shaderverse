@@ -41,6 +41,19 @@ Decisions made on 2026-10-26 about the cockpit layout ([The hanging rig](hanging
 | Knob slots | Eight slots in the top row of a hanging control console, just below the portal on screen | Settles the open question on knob arrangement; keeps knobs near the portal |
 | Knob-to-code link | Color tint and hover highlighting instead of tubes | The tubes go with the console |
 
+Decisions made on 2026-10-30 about modals and the control board ([No modals](no-modals.md), [The control board](control-board.md)).
+
+| Topic | Decision | Reason |
+|---|---|---|
+| Modals | None: no browser dialogs, popups, popovers, tabs or menu screens. Features live on the console or as pages on a monitor | Immersion; the interface is part of the cockpit (diegetic UI) |
+| Confirmations | Inline on the monitor that owns the action, reached by a block-shift pixel transition | The machine asks, in place, without covering anything |
+| Text entry | Drawn on in-scene displays, typed into through an invisible input layer. Replaces "flat overlays" above | The in-scene editor showed it works; no floating forms |
+| Menus and sign-in (later) | Pages on the status monitor | One home for configuring the machine |
+| Knob settings | A recessed knob edit display on the console, left of the knobs, replacing the popover | No popover |
+| Baking a knob | A small red button under each knob, covered by a bubble until the knob is in edit mode | A physical safety instead of a confirmation |
+| Baking all knobs | A BAKE key arms the mode and uncovers a large red bake all button | A two-stage commit for the most destructive action on the console |
+| Edit color | `COLORS.warn` yellow for knobs in edit or bake states | Caution; already in the palette |
+
 ## Open questions
 
 -   Default range for a new knob (a starting heuristic is in the
