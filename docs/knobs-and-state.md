@@ -54,7 +54,7 @@ Each time the source changes and parses, the app reconciles the
     the session, so undo brings the knob back with its range intact.
 -   **An unchanged parameter** keeps its knob, value and range.
 
-Deleting a knob through its popover "bakes" it: every use is replaced by
+Deleting a knob with its bake button ([The control board](control-board.md)) "bakes" it: every use is replaced by
 the knob's current value and the parameter is removed from the
 signature.
 

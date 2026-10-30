@@ -11,6 +11,9 @@ of view is from inside a spherical cockpit.
 > monitors and a knob console hung from the ceiling on articulated
 > arms, and pulls the camera back from the portal.
 
+> **No modals.** Nothing floats over the cockpit: no dialogs,
+> popovers or menus. See [No modals](no-modals.md).
+
 ## Cockpit geometry
 
 -   The cockpit is the interior of a large sphere.
@@ -102,8 +105,9 @@ In v1.0:
     fine control. Double-clicking resets to the default.
 -   Turning a knob updates a shader uniform only. It never triggers a
     recompile.
--   The label, range and step are edited in a small flat popover
-    anchored to the knob.
+-   The label, range and step are edited on a knob edit display set
+    into the console, and knobs are baked with physical buttons, not
+    a popover ([The control board](control-board.md)).
 
 Later control forms can include:
 

@@ -21,6 +21,8 @@ backend)
 | [Vision and identity](vision.md) | Product vision, naming and fiction, design philosophy, success criteria, north star |
 | [UI](ui.md) | The spherical cockpit: geometry, fixed view, portal, code display and editor overlay, knobs, readouts, reference interfaces |
 | [The hanging rig](hanging-rig.md) | Planned cockpit rework: camera pulled back, monitors and a knob console hung from the ceiling on articulated arms |
+| [No modals](no-modals.md) | The no-modals rule: features live on the console or on monitor pages, never in dialogs or popups; the library's on-screen confirmation |
+| [The control board](control-board.md) | Knob editing and baking without the popover: the knob edit display, bake buttons under bubbles, the BAKE key and the bake all button |
 | [Knobs and state](knobs-and-state.md) | The project store, knobs as `mainImage` parameters, reconciliation, what can become a knob, project format |
 | [Architecture](architecture.md) | Stack, module boundaries, panel system, rendering, overlays, persistence |
 | [AI](ai.md) | Agent capabilities and how agents work with the app (v1.1 and later) |

@@ -100,6 +100,10 @@ disabled while the user is typing in an overlay.
 
 ## Overlays
 
+> **Being phased out.** Under [No modals](no-modals.md), visible
+> overlays are replaced by monitor pages and console displays. DOM
+> stays only as invisible input layers for keyboard and IME input.
+
 Overlays are DOM elements above the 3D canvas. They are positioned using
 the projected screen bounds of the panel or knob they belong to, which
 is straightforward because the camera is fixed. They are styled to match
