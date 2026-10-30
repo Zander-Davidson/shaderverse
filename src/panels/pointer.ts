@@ -7,7 +7,7 @@ import { uvToPixel } from './patch';
 
 const LEAVE: PanelPointerEvent = {
   kind: 'leave', x: NaN, y: NaN, u: NaN, v: NaN, clientX: NaN, clientY: NaN, button: -1, buttons: 0,
-  shiftKey: false, altKey: false, metaKey: false, ctrlKey: false, deltaY: 0, captured: false,
+  shiftKey: false, altKey: false, metaKey: false, ctrlKey: false, deltaX: 0, deltaY: 0, captured: false,
 };
 
 interface Hit {
@@ -98,6 +98,7 @@ export class PointerRouter {
       altKey: e.altKey,
       metaKey: e.metaKey,
       ctrlKey: e.ctrlKey,
+      deltaX: 'deltaX' in e ? e.deltaX : 0,
       deltaY: 'deltaY' in e ? e.deltaY : 0,
       captured: this.captured === target,
     };
