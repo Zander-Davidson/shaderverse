@@ -189,6 +189,12 @@ export class EditDisplay extends CanvasPanel {
     this.invalidate();
   }
 
+  /** Shows an error from outside the display (a refused bake) on its bottom line. */
+  showError(error: string) {
+    this.error = error;
+    this.invalidate();
+  }
+
   /** World position of a field's middle, or of RESET VALUE (for tests). */
   pointOf(id: Field | 'reset'): THREE.Vector3 {
     const r = id === 'reset' ? { x: PAD, y: rowY(6), w: 250, h: 50 } : this.fieldRect(id);
