@@ -9,6 +9,7 @@ import type { HungLayout, LayoutConfig } from '../cockpit/layout';
 import { monitorFrame } from '../cockpit/rig';
 import { LOW_GFX, physicalMaterial } from '../style/quality';
 import { chromeMaterial, wallShape, type WallShape } from '../style/console';
+import { PAGE_FRAG, PAGE_UNIFORMS, PageChange } from './pageChange';
 import { CanvasPanel, redrawListenerRef } from './panel';
 
 /** How far the middle of the screen bulges toward the viewer, as a fraction of its shorter side. */
@@ -22,56 +23,6 @@ const FILLET = 0.045;
 const CASE_DEPTH = 0.3;
 /** How far the glass sits in front of the image, so reflections read as a layer over it. */
 const GLASS_GAP = 0.012;
-
-/** Length of a page change on a monitor (docs/no-modals.md). */
-const PAGE_MS = 360;
-/** Side of a transition block, in texels. */
-const BLOCK_PX = 12;
-
-/**
- * A page change (docs/no-modals.md): the screen breaks into blocks that
- * quantize toward a coarse mosaic, rows of them slide sideways out as the new
- * page's slide in, staggered by row with a little noise per block, and the
- * blocks settle back to full resolution with a brief scanline flicker.
- * Mode 2 is the reduced-motion dissolve: blocks swap in place, no movement.
- */
-const PAGE_FRAG = /* glsl */ `
-if (crtProgress < 1.0) {
-  vec2 grid = crtLines * 3.0 / ${BLOCK_PX}.0 * vec2(crtAspect, 1.0);
-  vec2 cell = floor(vMapUv * grid);
-  float rowNoise = fract(sin(cell.y * 91.7 + 3.1) * 43758.5453);
-  float blockNoise = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
-  // Each block runs its own 0..1 over the middle of the transition.
-  float delay = 0.4 * (0.7 * rowNoise + 0.3 * blockNoise);
-  float t = clamp((crtProgress - delay) / 0.6, 0.0, 1.0);
-  vec2 uv = vMapUv;
-  bool fresh = t >= 0.5;
-  if (crtPageMode > 1.5) {
-    fresh = blockNoise < crtProgress;
-  } else {
-    // Out then in: the old page's blocks slide away, the new page's arrive from the other side.
-    float dir = rowNoise < 0.5 ? -1.0 : 1.0;
-    float k = fresh ? 1.0 - (t - 0.5) * 2.0 : t * 2.0;
-    float shift = dir * (fresh ? -1.0 : 1.0) * k * k * (0.12 + 0.18 * blockNoise) * crtOpening.x * 2.0;
-    // Coarser toward the middle of the move, sharp at either end.
-    float coarse = floor(1.0 + 3.0 * k);
-    if (coarse > 1.0) {
-      vec2 cg = grid / coarse;
-      uv = (floor(uv * cg) + 0.5) / cg;
-    }
-    // Wrap inside the screen opening, like a picture losing horizontal sync.
-    float lo = 0.5 - crtOpening.x;
-    uv.x = lo + mod(uv.x + shift - lo, 2.0 * crtOpening.x);
-  }
-  vec2 dx = dFdx(vMapUv);
-  vec2 dy = dFdy(vMapUv);
-  vec4 page = fresh ? textureGrad(map, uv, dx, dy) : textureGrad(crtPrev, uv, dx, dy);
-  diffuseColor.rgb = page.rgb;
-  // Settle: a brief flicker in the scanlines.
-  float settle = smoothstep(0.6, 0.85, crtProgress) * (1.0 - smoothstep(0.85, 1.0, crtProgress));
-  diffuseColor.rgb *= 1.0 + 0.25 * settle * sin(vMapUv.y * crtLines * 3.14159 + crtProgress * 90.0);
-}
-`;
 
 /**
  * CRT touches on the image, all subtle: the corners darken toward the bezel,
@@ -133,21 +84,8 @@ export abstract class MonitorPanel extends CanvasPanel {
   private readonly caseMesh: THREE.Mesh;
   /** Reflective glass over the image: black, so only its reflections add light. */
   private readonly glassMesh: THREE.Mesh;
-  private readonly crt = {
-    crtOpening: { value: new THREE.Vector2(0.5, 0.5) },
-    crtLines: { value: 1 },
-    crtAspect: { value: 1 },
-    /** The page being left, during a page change. */
-    crtPrev: { value: null as THREE.Texture | null },
-    /** 0..1 through a page change; 1 when none is running. */
-    crtProgress: { value: 1 },
-    /** 1 block shift, 2 the reduced-motion dissolve. */
-    crtPageMode: { value: 1 },
-  };
-  /** A copy of the screen as it was when a page change began. */
-  private prevCanvas: HTMLCanvasElement | null = null;
-  private prevTexture: THREE.CanvasTexture | null = null;
-  private pageStart = 0;
+  /** Page changes (docs/no-modals.md), whose uniforms the CRT shader shares. */
+  private readonly pageChange = new PageChange();
   private scale = 1;
   /** A screen bulges under glass; a plate (the console's face) is flat and printed. */
   private readonly flat: boolean;
@@ -174,13 +112,8 @@ export abstract class MonitorPanel extends CanvasPanel {
     this.glassMesh = new THREE.Mesh(new THREE.BufferGeometry(), glassMaterial);
     this.glassMesh.raycast = () => {};
     this.material.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, this.crt);
-      shader.fragmentShader = shader.fragmentShader
-        .replace(
-          'void main() {',
-          'uniform vec2 crtOpening;\nuniform float crtLines;\nuniform float crtAspect;\nuniform sampler2D crtPrev;\nuniform float crtProgress;\nuniform float crtPageMode;\nvoid main() {',
-        )
-        .replace('#include <map_fragment>', CRT_FRAG);
+      Object.assign(shader.uniforms, this.pageChange.uniforms);
+      shader.fragmentShader = shader.fragmentShader.replace('void main() {', `${PAGE_UNIFORMS}void main() {`).replace('#include <map_fragment>', CRT_FRAG);
     };
     this.material.customProgramCacheKey = () => 'crt-monitor';
     this.rig.add(this.mesh, this.bezelMesh, this.caseMesh);
@@ -279,9 +212,8 @@ export abstract class MonitorPanel extends CanvasPanel {
     this.glassMesh.geometry.dispose();
     this.glassMesh.geometry = g;
     // The opening in texture coordinates, and one scanline per three texels.
-    this.crt.crtOpening.value.set(o.hw / this.rect.w, o.hh / this.rect.h);
-    this.crt.crtLines.value = this.pixelHeight / 3;
-    this.crt.crtAspect.value = this.pixelWidth / this.pixelHeight;
+    this.pageChange.uniforms.crtOpening.value.set(o.hw / this.rect.w, o.hh / this.rect.h);
+    this.pageChange.resize(this.pixelWidth, this.pixelHeight);
   }
 
   /**
@@ -290,35 +222,18 @@ export abstract class MonitorPanel extends CanvasPanel {
    * draw. A cut with ?gfx=low, and a dissolve in place with reduced motion.
    */
   protected beginPageChange(): void {
-    if (this.flat || LOW_GFX) return;
-    if (!this.prevCanvas) {
-      this.prevCanvas = document.createElement('canvas');
-      this.prevTexture = new THREE.CanvasTexture(this.prevCanvas);
-      this.prevTexture.colorSpace = THREE.SRGBColorSpace;
-      this.prevTexture.minFilter = THREE.LinearMipmapLinearFilter;
-      this.crt.crtPrev.value = this.prevTexture;
-    }
-    // Resizing the copy also clears it.
-    this.prevCanvas.width = this.canvas.width;
-    this.prevCanvas.height = this.canvas.height;
-    this.prevCanvas.getContext('2d')!.drawImage(this.canvas, 0, 0);
-    this.prevTexture!.needsUpdate = true;
-    this.crt.crtPageMode.value = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 2 : 1;
-    this.crt.crtProgress.value = 0;
-    this.pageStart = performance.now();
+    if (!this.flat) this.pageChange.begin(this.canvas);
   }
 
   /** True while a page change is playing. */
   get changingPage(): boolean {
-    return this.crt.crtProgress.value < 1;
+    return this.pageChange.running;
   }
 
   override update(): void {
     super.update();
-    if (!this.changingPage) return;
-    this.crt.crtProgress.value = Math.min(1, (performance.now() - this.pageStart) / PAGE_MS);
     // The screen changes every frame until the new page settles.
-    redrawListenerRef()?.(this.mesh);
+    if (this.pageChange.tick()) redrawListenerRef()?.(this.mesh);
   }
 
   /** World position of panel pixel (x, y) on the screen, `lift` world units off its surface. */
