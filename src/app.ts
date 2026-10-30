@@ -150,7 +150,7 @@ export function startApp(root: HTMLElement): void {
   router.add(library);
   for (const s of knobs.slots) router.add(s);
   for (const t of controls.targets) router.add(t);
-  router.add(controls.board.display.screen);
+  for (const t of controls.boardTargets) router.add(t);
   // Its bare face just stops the pointer; the knobs and buttons stand in
   // front of it, so they're picked first.
   router.add(controls);
@@ -400,6 +400,8 @@ export function startApp(root: HTMLElement): void {
         const c = controls.controls.find((x) => x.control.id === id)!;
         return screenPoint(c.group.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas);
       },
+      /** Screen point of knob slot `slot`'s bake button. */
+      bakePoint: (slot: number) => screenPoint(controls.board.bubbles[slot]!.button.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas),
       /** Screen point of a field (or RESET VALUE) on the knob edit display. */
       displayPoint: (id: string) => screenPoint(controls.board.display.screen.pointOf(id as 'label'), cockpit.camera, canvas),
       bounds: overlayBounds,

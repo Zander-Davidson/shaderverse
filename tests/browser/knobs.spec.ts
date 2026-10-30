@@ -84,6 +84,26 @@ test('double-click resets; a click edits the knob on the console display', async
   await expect.poll(async () => (await state(page)).ui.editKnobId).toBeNull();
 });
 
+test('the bake button under a knob is covered until the knob is edited, then bakes it', async ({ page }) => {
+  const b = await page.evaluate(() => (window as any).__sv.bakePoint(0));
+  // Covered: clicking the bubble does nothing.
+  await page.mouse.click(b.x, b.y);
+  await page.waitForTimeout(400);
+  expect((await state(page)).project.knobs).toHaveLength(1);
+
+  const p = await page.evaluate(() => (window as any).__sv.knobPoint(0));
+  await page.mouse.click(p.x, p.y);
+  await expect.poll(async () => (await state(page)).ui.editKnobId).not.toBeNull();
+  await page.waitForTimeout(400); // the bubble slides away
+  const c = await page.evaluate(() => (window as any).__sv.bakePoint(0));
+  await page.mouse.click(c.x, c.y);
+  await expect.poll(async () => (await state(page)).project.knobs.length).toBe(0);
+  const s = await state(page);
+  expect(s.ui.editKnobId).toBeNull();
+  expect(s.project.source).toContain('void mainImage(out vec4 fragColor, in vec2 fragCoord)');
+  expect(s.project.source).toContain('vec4(0.1,');
+});
+
 test('turning a knob leaves edit mode', async ({ page }) => {
   const p = await page.evaluate(() => (window as any).__sv.knobPoint(0));
   await page.mouse.click(p.x, p.y);

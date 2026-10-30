@@ -186,16 +186,46 @@ export class ConsolePanel extends MonitorPanel {
     }
     const b = this.board;
     this.rig.add(b.display.group, b.bakeAll.group, b.key.group, ...b.bubbles.map((x) => x.group));
+    for (const bubble of b.bubbles) bubble.onPress = () => this.bake(bubble.slot);
     this.syncLights();
+    this.syncBoard();
     store.subscribe((s, p) => {
       if (s.project.playback !== p.project.playback || s.compile !== p.compile) this.syncLights();
+      if (s.ui.editKnobId !== p.ui.editKnobId || s.project.knobs !== p.project.knobs) this.syncBoard();
     });
     void document.fonts?.ready.then(() => this.invalidate());
   }
 
+  private last = 0;
+
   override update(): void {
+    const now = performance.now();
+    const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
+    this.last = now;
+    for (const b of this.board.bubbles) b.tick(dt);
     super.update();
     this.board.display.screen.update();
+  }
+
+  /** Every pointer target on the board: the display and the bake buttons. */
+  get boardTargets(): PointerTarget[] {
+    return [this.board.display.screen, ...this.board.bubbles];
+  }
+
+  /** The bubble under the knob in edit mode slides away from its button. */
+  private syncBoard() {
+    const { project, ui } = this.store.getState();
+    const slot = project.knobs.find((k) => k.id === ui.editKnobId)?.slot ?? -1;
+    for (const b of this.board.bubbles) b.setOpen(b.slot === slot);
+  }
+
+  /** A knob's bake button: its value goes into the code and the knob is gone. */
+  private bake(slot: number) {
+    const s = this.store.getState();
+    const k = s.project.knobs.find((x) => x.slot === slot && x.id === s.ui.editKnobId);
+    if (!k) return;
+    const r = s.dispatch({ type: 'deleteKnob', id: k.id });
+    if (!r.ok) this.board.display.screen.showError(r.error);
   }
 
   /** The face lets the pointer through its holes, to the display and buttons sunk in them. */

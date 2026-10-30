@@ -4,10 +4,13 @@
 // display's glass, each bubble's well, and the bake all button's well.
 
 import * as THREE from 'three';
+import { redrawListenerRef, type PanelPointerEvent, type PointerTarget } from '../panels/panel';
 import { chromeMaterial } from '../style/console';
 import { LOW_GFX, physicalMaterial } from '../style/quality';
 import type { EditDisplay } from './editDisplay';
 import { BAKE_ALL, BAKE_KEY, BUBBLE_R, BUBBLE_Y, EDIT_DISPLAY, knobLocal } from './plan';
+
+const redraw = (o: THREE.Object3D) => redrawListenerRef()?.(o);
 
 /** How far the edit display's glass sits below the console's face. */
 export const DISPLAY_DEPTH = 0.07;
@@ -69,17 +72,26 @@ function well(r: number, depth: number, mats: Mats): THREE.Group {
   return g;
 }
 
-/** A clear resin dome, with the thin dark seam where it meets the face. */
-function bubble(r: number, height: number, mats: Mats): THREE.Group {
-  const g = new THREE.Group();
+/** A clear resin dome. */
+function bubble(r: number, height: number, mats: Mats): THREE.Mesh {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), mats.resin);
   dome.scale.z = height / r;
   dome.renderOrder = 2;
-  const seam = new THREE.Mesh(new THREE.RingGeometry(r * 0.98, r * 1.08, 40), mats.seam);
-  seam.position.z = 0.002;
-  g.add(dome, seam);
-  return g;
+  return dome;
 }
+
+/** The thin dark seam where a bubble meets the face. */
+function seam(r: number, mats: Mats): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.RingGeometry(r * 0.98, r * 1.08, 40), mats.seam);
+  m.position.z = 0.002;
+  return m;
+}
+
+const easeOut = (t: number) => 1 - (1 - t) ** 3;
+/** How long a knob's bubble takes to slide away, or back. */
+const BUBBLE_S = 0.25;
+/** How far a pressed button travels. */
+const PRESS = 0.018;
 
 /** A red pushbutton: a short glossy cylinder with a rounded top. */
 function redButton(r: number, h: number, mats: Mats): THREE.Mesh {
@@ -88,11 +100,25 @@ function redButton(r: number, h: number, mats: Mats): THREE.Mesh {
   return m;
 }
 
-/** One knob's bake bubble: its well, the red button in it, and the dome over it. */
-export class BakeBubble {
+/**
+ * One knob's bake bubble: its well, the red button in it, and the dome over
+ * it. While its knob is in edit mode the dome slides down and back under the
+ * face, and the button it uncovers bakes the knob. Only the exposed button
+ * takes the pointer; the bubble never looks clickable.
+ */
+export class BakeBubble implements PointerTarget {
   readonly group = new THREE.Group();
   readonly button: THREE.Mesh;
-  readonly dome: THREE.Group;
+  readonly dome: THREE.Mesh;
+  pixelWidth = 1;
+  pixelHeight = 1;
+  /** 0 covered, 1 slid away. */
+  private open = 0;
+  private goal = 0;
+  private pressed = false;
+  private readonly rest: number;
+  private lift = 0;
+  onPress: (() => void) | null = null;
 
   constructor(
     readonly slot: number,
@@ -100,12 +126,75 @@ export class BakeBubble {
   ) {
     const [x] = knobLocal(slot);
     this.group.position.set(x, BUBBLE_Y, 0);
-    this.group.add(well(FACE_HOLES.bubble, WELL_DEPTH, mats));
-    this.button = redButton(BUBBLE_R * 0.72, 0.04, mats);
-    this.button.position.z = -WELL_DEPTH + 0.025;
+    this.group.add(well(FACE_HOLES.bubble, WELL_DEPTH, mats), seam(FACE_HOLES.bubble * 1.02, mats));
+    this.button = redButton(BUBBLE_R * 0.8, 0.05, mats);
+    // Its own material, so it can light up when uncovered.
+    this.button.material = (this.button.material as THREE.MeshPhysicalMaterial).clone();
+    this.rest = this.button.position.z = -WELL_DEPTH + 0.025;
     this.dome = bubble(FACE_HOLES.bubble * 1.02, BUBBLE_R * 0.85, mats);
     this.group.add(this.button, this.dome);
     this.group.traverse((o) => (o.raycast = () => {}));
+    this.button.raycast = THREE.Mesh.prototype.raycast;
+  }
+
+  get meshes(): THREE.Object3D[] {
+    return [this.button];
+  }
+
+  /** Whether the button is uncovered, so it can be pressed. */
+  get exposed(): boolean {
+    return this.goal === 1 && this.open > 0.9;
+  }
+
+  /** Uncovers the button (its knob is in edit mode), or covers it again. */
+  setOpen(open: boolean) {
+    this.goal = open ? 1 : 0;
+    if (!open) this.setPressed(false);
+  }
+
+  /** Advances the slide; true while it moves. */
+  tick(dt: number): boolean {
+    if (this.open === this.goal) return false;
+    this.open = this.goal > this.open ? Math.min(1, this.open + dt / BUBBLE_S) : Math.max(0, this.open - dt / BUBBLE_S);
+    // Down into the well and back under the face, toward the console's far edge.
+    const t = easeOut(this.goal ? this.open : 1 - this.open);
+    const k = this.goal ? t : 1 - t;
+    const r = FACE_HOLES.bubble;
+    this.dome.position.set(0, k * r * 2.3, -k * BUBBLE_R * 1.1);
+    this.dome.visible = k < 0.999;
+    // Uncovered, the button stands up in a shallow well, faintly lit.
+    this.lift = k * (WELL_DEPTH - 0.035);
+    this.button.position.z = this.rest + this.lift - (this.pressed ? PRESS : 0);
+    (this.button.material as THREE.MeshPhysicalMaterial).emissive.setRGB(0.35 * k, 0.02 * k, 0.02 * k);
+    redraw(this.group);
+    return true;
+  }
+
+  private setPressed(p: boolean) {
+    if (p === this.pressed) return;
+    this.pressed = p;
+    this.button.position.z = this.rest + this.lift - (p ? PRESS : 0);
+    redraw(this.group);
+  }
+
+  hitTest(): boolean {
+    return this.exposed;
+  }
+
+  onPointer(e: PanelPointerEvent): boolean | void {
+    if (!this.exposed) return;
+    if (e.kind === 'down' && e.button === 0) {
+      this.setPressed(true);
+      return true;
+    }
+    if (e.kind === 'up' && this.pressed) {
+      this.setPressed(false);
+      this.onPress?.();
+    }
+  }
+
+  cursorAt(): string {
+    return this.exposed ? 'pointer' : 'default';
   }
 }
 
@@ -126,6 +215,7 @@ export class BakeAllButton {
     dome.position.y = -r;
     this.guard.position.y = r;
     this.guard.add(dome);
+    this.group.add(seam(r, mats));
     // A small chrome hinge barrel along the back edge.
     const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, r * 0.9, 16).rotateZ(Math.PI / 2), mats.chrome);
     hinge.position.set(0, r + 0.01, 0.02);

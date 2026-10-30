@@ -196,6 +196,30 @@ class KnobCap {
     this.group.add(this.pivot);
   }
 
+  /** Seconds into a retraction (sinking into the face and rising back bare), or null. */
+  private retracting: number | null = null;
+
+  /** Sinks into the face and comes back up bare: its knob was baked. */
+  retract() {
+    this.retracting = 0;
+  }
+
+  /** Advances a retraction; true while it moves. */
+  tick(dt: number): boolean {
+    if (this.retracting === null) return false;
+    this.retracting += dt;
+    const t = this.retracting;
+    const DOWN = 0.18;
+    const HOLD = 0.12;
+    const UP = 0.3;
+    // Down fast, a beat below the face, then back up slowly.
+    const sink = t < DOWN ? (t / DOWN) ** 2 : t < DOWN + HOLD ? 1 : Math.max(0, 1 - (t - DOWN - HOLD) / UP);
+    this.group.position.z = KNOB_LIFT - sink * 0.2;
+    if (t >= DOWN + HOLD + UP) this.retracting = null;
+    redrawListener.call(this.group);
+    return true;
+  }
+
   /** On the console's face, facing out of it (local +z). */
   place(slot: number) {
     const [x, y] = knobLocal(slot);
@@ -260,6 +284,7 @@ export class KnobSlot implements PointerTarget {
 
   setKnob(k: KnobRecord | null) {
     const prev = this.face.knob;
+    if (prev && !k) this.cap.retract();
     this.face.knob = k;
     if (this.cap.pivot.visible !== !!k) redrawListener.call(this.cap.group);
     this.cap.setAssigned(!!k);
@@ -398,8 +423,16 @@ export class KnobBank {
     for (const s of this.slots) s.setLinked(!!param && s.knob?.param === param);
   }
 
+  private last = 0;
+
   update() {
-    for (const s of this.slots) s.face.update();
+    const now = performance.now();
+    const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
+    this.last = now;
+    for (const s of this.slots) {
+      s.cap.tick(dt);
+      s.face.update();
+    }
   }
 
   setAnisotropy(n: number) {
