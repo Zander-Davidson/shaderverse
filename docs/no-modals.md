@@ -3,8 +3,8 @@
 *Part of the [Shaderverse design docs](README.md).*
 
 **Status:** design. The first piece, the
-[library confirmation](#first-piece-the-library-confirmation), can be
-built now.
+[library confirmation](#first-piece-the-library-confirmation), is
+built, with the monitor page transition.
 
 There are no modals in Shaderverse. No browser dialogs, popups,
 popovers, tab strips, dropdown menus or menu screens. The user is
@@ -131,8 +131,9 @@ inline confirmation on the library monitor.
         page, which now shows the new example as active.
     -   **CANCEL**, Escape, or clicking the same example again
         transitions back without changing anything.
-    -   Clicking a different example while the page is up changes the
-        question to that example (the page redraws in place; no second
+    -   Choosing a different example while the page is up (its number
+        key; the list is not on the confirm page) changes the question
+        to that example (the page redraws in place; no second
         transition).
 -   The number keys that load examples (`1` to `9`, `0`) go through the
     same path, so they also show the confirm page.

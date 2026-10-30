@@ -89,12 +89,11 @@ export function startApp(root: HTMLElement): void {
   const helpOverlay = new HelpOverlay();
   const libraryActions: LibraryActions = {
     examples: EXAMPLES.map((e) => e.name),
-    loadExample: (i) => {
-      const s = store.getState();
-      const edited = s.project.updatedAt !== s.project.createdAt;
-      if (edited && !window.confirm('Replace the current project with this example? Export it first to keep it.')) return;
-      s.dispatch({ type: 'loadProject', project: EXAMPLES[i]!.create() });
+    isEdited: () => {
+      const p = store.getState().project;
+      return p.updatedAt !== p.createdAt;
     },
+    replaceWithExample: (i) => store.getState().dispatch({ type: 'loadProject', project: EXAMPLES[i]!.create() }),
     exportProject: () => {
       const p = store.getState().project;
       downloadText(`${slug(p.name)}.shaderverse.json`, exportProjectJson(p), 'application/json');
@@ -237,6 +236,13 @@ export function startApp(root: HTMLElement): void {
       return;
     }
     const s = store.getState();
+    // The library's question takes Escape and Enter while it waits.
+    if (library.confirming !== null && !helpOverlay.isOpen && (e.key === 'Escape' || e.key === 'Enter')) {
+      if (e.key === 'Enter') library.confirm();
+      else library.cancel();
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Escape' && !helpOverlay.isOpen && s.ui.lean) {
       s.dispatch({ type: 'setLean', lean: false });
       e.preventDefault();
@@ -278,7 +284,7 @@ export function startApp(root: HTMLElement): void {
       default:
         // 1–9 load the first nine examples, 0 the tenth.
         if (/^[0-9]$/.test(e.key) && EXAMPLES[(Number(e.key) + 9) % 10]) {
-          libraryActions.loadExample((Number(e.key) + 9) % 10);
+          library.chooseExample((Number(e.key) + 9) % 10);
           break;
         }
         return;
@@ -383,7 +389,7 @@ export function startApp(root: HTMLElement): void {
   // Handles for browser tests and debugging; not part of any public API.
   Object.assign(window, {
     __sv: {
-      store, runtime, router, cockpit, companion, code, plot, status, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
+      store, runtime, router, cockpit, companion, code, plot, status, library, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
       knobPoint: (slot: number) => screenPoint(knobs.slots[slot]!.anchor(), cockpit.camera, canvas),
       controls,
       /** Screen point of a console control, by id. */
@@ -392,6 +398,11 @@ export function startApp(root: HTMLElement): void {
         return screenPoint(c.group.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas);
       },
       bounds: overlayBounds,
+      /** Screen point of a button on the library monitor, by id. */
+      libraryPoint: (id: string) => {
+        const b = library.buttonCenter(id);
+        return b && screenPoint(library.pointAt(b.x, b.y), cockpit.camera, canvas);
+      },
       /** Screen point of a source offset on the code monitor. */
       codePoint: (pos: number) => {
         const px = code.pixelOf(pos);

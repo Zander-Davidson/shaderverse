@@ -232,14 +232,21 @@ export class StatusPanel extends ReadoutPanel {
 
 export interface LibraryActions {
   examples: string[];
-  loadExample(index: number): void;
+  /** True when the project has edits that loading an example would replace. */
+  isEdited(): boolean;
+  replaceWithExample(index: number): void;
   exportProject(): void;
   importProject(): void;
   exportGlsl(): void;
   toggleHelp(): void;
 }
 
+/** The library's pages (docs/no-modals.md): its home, or asking before an example replaces edits. */
+type LibraryPage = 'home' | { confirm: number; saved: boolean };
+
 export class LibraryPanel extends ReadoutPanel {
+  private page: LibraryPage = 'home';
+
   constructor(
     cfg: LayoutConfig,
     private readonly store: ProjectStore,
@@ -255,9 +262,61 @@ export class LibraryPanel extends ReadoutPanel {
     this.relayoutTo(cfg, cfg.library);
   }
 
+  /** Center of a drawn button in panel pixels, for tests. */
+  buttonCenter(id: string): { x: number; y: number } | null {
+    const b = this.buttons.find((x) => x.id === id);
+    return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : null;
+  }
+
+  /** The example the confirm page is asking about, if it is up. */
+  get confirming(): number | null {
+    return this.page === 'home' ? null : this.page.confirm;
+  }
+
+  /**
+   * Loads an example, from its button or a number key. With edits, the
+   * monitor asks first; choosing the example it is asking about again cancels,
+   * and another example changes the question in place.
+   */
+  chooseExample(index: number): void {
+    if (this.page !== 'home') {
+      if (this.page.confirm === index) this.cancel();
+      else this.setPage({ confirm: index, saved: this.page.saved }, false);
+    } else if (this.actions.isEdited()) {
+      this.setPage({ confirm: index, saved: false });
+    } else {
+      this.actions.replaceWithExample(index);
+    }
+  }
+
+  /** LOAD on the confirm page (or Enter). */
+  confirm(): void {
+    if (this.page === 'home') return;
+    const index = this.page.confirm;
+    this.setPage('home');
+    this.actions.replaceWithExample(index);
+  }
+
+  /** CANCEL on the confirm page (or Escape). */
+  cancel(): void {
+    if (this.page !== 'home') this.setPage('home');
+  }
+
+  private setPage(page: LibraryPage, transition = true): void {
+    if (transition) this.beginPageChange();
+    this.page = page;
+    this.invalidate();
+  }
+
   protected draw(ctx: CanvasRenderingContext2D): void {
-    const current = this.store.getState().project.name;
     this.frame(ctx, 'LIBRARY', 'v1.0');
+    if (this.page === 'home') this.drawHome(ctx);
+    else this.drawConfirm(ctx, this.page);
+    this.end(ctx);
+  }
+
+  private drawHome(ctx: CanvasRenderingContext2D): void {
+    const current = this.store.getState().project.name;
     this.label(ctx, 'NEW FROM EXAMPLE', 80);
     // Two columns, down the left one first.
     const step = 46;
@@ -267,13 +326,11 @@ export class LibraryPanel extends ReadoutPanel {
     this.actions.examples.forEach((name, i) => {
       const col = Math.floor(i / rows);
       const y = 96 + (i % rows) * step;
-      const item = { id: `ex:${i}`, text: `${String(i + 1).padStart(2, '0')} ${name.toUpperCase()}`, active: name === current };
+      const item = { id: `ex:${i}`, text: this.exampleTitle(i), active: name === current };
       this.buttonRow(ctx, y, step - 8, [item], 'left', col ? mid + 5 : x0, col ? this.right : mid - 5);
     });
     const y0 = 96 + rows * step + 12;
-    ctx.fillStyle = 'rgba(63, 242, 196, 0.25)';
-    const lx = this.left(y0 - 1, y0 + 2);
-    ctx.fillRect(lx, y0, this.right - lx, 2);
+    this.rule(ctx, y0);
     this.label(ctx, 'FILE', y0 + 24);
     this.buttonRow(ctx, y0 + 40, 40, [
       { id: 'export', text: '↓ PROJECT' },
@@ -283,14 +340,75 @@ export class LibraryPanel extends ReadoutPanel {
       { id: 'glsl', text: '↓ .GLSL' },
       { id: 'help', text: '? KEYS' },
     ]);
-    this.end(ctx);
+  }
+
+  private drawConfirm(ctx: CanvasRenderingContext2D, page: { confirm: number; saved: boolean }): void {
+    ctx.font = `700 34px ${MONO}`;
+    ctx.fillStyle = COLORS.warn;
+    ctx.fillText(`LOAD ${this.exampleTitle(page.confirm)}?`, this.left(80, 116), 102);
+
+    ctx.font = `500 22px ${MONO}`;
+    ctx.fillStyle = COLORS.text;
+    let y = 156;
+    for (const line of wrap(ctx, 'The current project has edits that will be replaced. Download it first to keep it.', this.right - this.left(y - 14, y + 120))) {
+      ctx.fillText(line, this.left(y - 14, y + 14), y);
+      y += 32;
+    }
+
+    y += 14;
+    const x0 = this.left(y, y + 46);
+    this.buttonRow(ctx, y, 46, [{ id: 'save', text: page.saved ? '✓ PROJECT SAVED' : '↓ PROJECT FIRST', active: page.saved }], 'center', x0, x0 + (this.right - x0) * 0.62);
+
+    y += 74;
+    this.buttonRow(ctx, y, 52, [
+      { id: 'load', text: 'LOAD' },
+      { id: 'cancel', text: 'CANCEL' },
+    ]);
+
+    const fy = this.vh - 26;
+    this.rule(ctx, fy - 26);
+    ctx.font = `600 16px ${MONO}`;
+    ctx.fillStyle = COLORS.dim;
+    ctx.fillText('ESC cancel · ENTER load', this.left(fy - 10, fy + 10), fy);
+  }
+
+  /** A thin phosphor line across the screen. */
+  private rule(ctx: CanvasRenderingContext2D, y: number): void {
+    ctx.fillStyle = 'rgba(63, 242, 196, 0.25)';
+    const lx = this.left(y - 1, y + 2);
+    ctx.fillRect(lx, y, this.rightAt(y - 1, y + 2) - lx, 2);
+  }
+
+  private exampleTitle(i: number): string {
+    return `${String(i + 1).padStart(2, '0')} ${this.actions.examples[i]!.toUpperCase()}`;
   }
 
   protected onButton(id: string): void {
-    if (id.startsWith('ex:')) this.actions.loadExample(Number(id.slice(3)));
-    else if (id === 'export') this.actions.exportProject();
+    if (id.startsWith('ex:')) this.chooseExample(Number(id.slice(3)));
+    else if (id === 'load') this.confirm();
+    else if (id === 'cancel') this.cancel();
+    else if (id === 'save' && this.page !== 'home') {
+      this.actions.exportProject();
+      this.page = { ...this.page, saved: true };
+      this.invalidate();
+    } else if (id === 'export') this.actions.exportProject();
     else if (id === 'import') this.actions.importProject();
     else if (id === 'glsl') this.actions.exportGlsl();
     else if (id === 'help') this.actions.toggleHelp();
   }
+}
+
+/** Breaks text into lines no wider than `width` in the current font. */
+function wrap(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > width) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
 }
