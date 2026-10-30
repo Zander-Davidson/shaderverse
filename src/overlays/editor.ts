@@ -141,8 +141,7 @@ export class EditorOverlay {
     // Clicks outside close the editor (canvas clicks are routed by the app).
     document.addEventListener('pointerdown', (e) => {
       if (!this.root.hidden && !this.root.contains(e.target as Node) && !(e.target instanceof HTMLCanvasElement)) {
-        const el = e.target as HTMLElement;
-        if (!el.closest('.sv-popover')) this.session.close();
+        this.session.close();
       }
     });
     window.addEventListener('resize', () => this.position());

@@ -5,7 +5,7 @@ import { createStore } from 'zustand/vanilla';
 import { analyze } from '../source/mainImage';
 import { isValidName } from '../source/literals';
 import { reconcile } from '../source/reconcile';
-import { bakeRewrite, renameRewrite } from '../source/rewrite';
+import { bakeAll, bakeRewrite, renameRewrite } from '../source/rewrite';
 import type { ShaderError } from '../shader/errors';
 import type { Quality } from '../shader/runtime';
 import { KNOB_SLOTS, makeKnob, type KnobRecord, type Project } from './schema';
@@ -26,8 +26,10 @@ export type Action =
   | { type: 'openEditor' }
   | { type: 'closeEditor' }
   | { type: 'setCodeScroll'; line: number }
-  | { type: 'openPopover'; id: string }
-  | { type: 'closePopover' }
+  | { type: 'editKnob'; id: string }
+  | { type: 'stopEditingKnob' }
+  | { type: 'setBakeArmed'; armed: boolean }
+  | { type: 'bakeAllKnobs' }
   | { type: 'setLean'; lean: boolean }
   | { type: 'loadProject'; project: Project };
 
@@ -52,7 +54,10 @@ export interface AppState {
   compile: CompileState;
   ui: {
     editorOpen: boolean;
-    popoverKnobId: string | null;
+    /** The knob in knob edit mode on the console (docs/control-board.md). */
+    editKnobId: string | null;
+    /** Whether the BAKE key is turned to ARM. */
+    bakeArmed: boolean;
     codeScrollLine: number;
     /** Incremented by `restart` so the runtime can react. */
     restartCount: number;
@@ -161,8 +166,16 @@ export function createProjectStore(initial: Project) {
           if (!knob) return fail('No such knob.');
           const r = bakeRewrite(p.source, knob.param, knob.value, knob.type);
           if (!r) return fail('The shader could not be analyzed, so the knob cannot be deleted.');
-          const popoverKnobId = s.ui.popoverKnobId === knob.id ? null : s.ui.popoverKnobId;
-          set({ ...withSource(p, r.source), ui: { ...s.ui, popoverKnobId } });
+          const editKnobId = s.ui.editKnobId === knob.id ? null : s.ui.editKnobId;
+          set({ ...withSource(p, r.source), ui: { ...s.ui, editKnobId } });
+          return OK;
+        }
+
+        case 'bakeAllKnobs': {
+          // Only with the key at ARM, so a stray dispatch can't bake everything.
+          if (!s.ui.bakeArmed) return fail('Turn the BAKE key to ARM first.');
+          if (!p.knobs.length) return fail('There are no knobs to bake.');
+          set(withSource(p, bakeAll(p.source, p.knobs)));
           return OK;
         }
 
@@ -194,7 +207,7 @@ export function createProjectStore(initial: Project) {
 
         case 'openEditor':
           // The code panel is out of view when leaned in.
-          set({ ui: { ...s.ui, editorOpen: true, popoverKnobId: null, lean: false } });
+          set({ ui: { ...s.ui, editorOpen: true, lean: false } });
           return OK;
 
         case 'closeEditor':
@@ -205,18 +218,23 @@ export function createProjectStore(initial: Project) {
           set({ ui: { ...s.ui, codeScrollLine: Math.max(0, Math.floor(action.line)) } });
           return OK;
 
-        case 'openPopover':
+        case 'editKnob':
           if (!p.knobs.some((k) => k.id === action.id)) return fail('No such knob.');
-          set({ ui: { ...s.ui, popoverKnobId: action.id } });
+          if (s.ui.bakeArmed) return fail('The knobs are locked while the BAKE key is at ARM.');
+          set({ ui: { ...s.ui, editKnobId: action.id } });
           return OK;
 
-        case 'closePopover':
-          set({ ui: { ...s.ui, popoverKnobId: null } });
+        case 'stopEditingKnob':
+          if (s.ui.editKnobId) set({ ui: { ...s.ui, editKnobId: null } });
+          return OK;
+
+        case 'setBakeArmed':
+          set({ ui: { ...s.ui, bakeArmed: action.armed, editKnobId: action.armed ? null : s.ui.editKnobId } });
           return OK;
 
         case 'setLean':
           if (action.lean === s.ui.lean) return OK;
-          set({ ui: { ...s.ui, lean: action.lean, editorOpen: action.lean ? false : s.ui.editorOpen, popoverKnobId: null } });
+          set({ ui: { ...s.ui, lean: action.lean, editorOpen: action.lean ? false : s.ui.editorOpen } });
           return OK;
 
         case 'loadProject':
@@ -224,26 +242,30 @@ export function createProjectStore(initial: Project) {
           set({
             ...withSource(action.project, action.project.source),
             compile: { status: 'pending', errors: [], source: action.project.source },
-            ui: { ...s.ui, editorOpen: false, popoverKnobId: null, codeScrollLine: 0 },
+            ui: { ...s.ui, editorOpen: false, editKnobId: null, bakeArmed: false, codeScrollLine: 0 },
           });
           return OK;
       }
     };
 
     const PERSISTENT: Action['type'][] = [
-      'setSource', 'createKnob', 'renameKnob', 'updateKnob', 'deleteKnob',
+      'setSource', 'createKnob', 'renameKnob', 'updateKnob', 'deleteKnob', 'bakeAllKnobs',
       'setKnobValue', 'resetKnob', 'setPlayback', 'loadProject',
     ];
 
     return {
       ...withSource(initial, initial.source),
       compile: { status: 'pending', errors: [], source: initial.source },
-      ui: { editorOpen: false, popoverKnobId: null, codeScrollLine: 0, restartCount: 0, lean: false },
+      ui: { editorOpen: false, editKnobId: null, bakeArmed: false, codeScrollLine: 0, restartCount: 0, lean: false },
       log: [],
       setCompile: (compile) => set({ compile }),
       dispatch: (action, actor = 'user') => {
         const result = reduce(action);
         if (!result.ok) return result;
+        // Edit mode ends with its knob, however the knob went (a bake, an
+        // edit or undo in the source).
+        const { ui, project } = get();
+        if (ui.editKnobId && !project.knobs.some((k) => k.id === ui.editKnobId)) set({ ui: { ...ui, editKnobId: null } });
         const entry: LogEntry = { action, actor, at: new Date().toISOString() };
         const log = get().log;
         const last = log[log.length - 1];

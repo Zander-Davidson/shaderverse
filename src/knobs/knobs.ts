@@ -12,7 +12,7 @@ import { KNOB_FACE, KNOB_LIFT, KNOB_STRIP, knobLocal } from '../console/plan';
 const redrawListener = { call: (o: THREE.Object3D) => redrawListenerRef()?.(o) };
 import { KNOB_SLOTS, type KnobRecord } from '../project/schema';
 import type { ProjectStore } from '../project/store';
-import { COLORS, KNOB_TINT, MONO } from '../theme';
+import { COLORS, KNOB_EDIT_TINT, KNOB_TINT, MONO } from '../theme';
 
 /** Screen pixels of vertical drag for the full range; fine control divides by 10. */
 export const DRAG_PX_FULL_RANGE = 240;
@@ -43,6 +43,8 @@ class KnobFace extends CanvasPanel {
   active = false;
   /** Lit because its parameter is hovered in the code. */
   linked = false;
+  /** Teal, or yellow while it's being edited or the BAKE key is armed. */
+  tint = KNOB_TINT;
 
   constructor(readonly slot: number) {
     super({ x: 0, y: 0, w: KNOB_FACE, h: KNOB_FACE + KNOB_STRIP }, FACE_PX, Math.round((FACE_PX * (KNOB_FACE + KNOB_STRIP)) / KNOB_FACE), 0, 0);
@@ -62,7 +64,7 @@ class KnobFace extends CanvasPanel {
     const cy = W / 2;
     // Ring just outside the cap.
     const R = W * 0.3;
-    const tint = KNOB_TINT;
+    const tint = this.tint;
     const k = this.knob;
     ctx.clearRect(0, 0, W, H);
 
@@ -79,7 +81,7 @@ class KnobFace extends CanvasPanel {
     ctx.fill();
     ctx.beginPath();
     ctx.arc(cx, cy, rd - 6, 0, Math.PI * 2);
-    if (k && (this.hover || this.active || this.linked)) {
+    if (k && (this.hover || this.active || this.linked || this.tint !== KNOB_TINT)) {
       ctx.lineWidth = 3;
       ctx.strokeStyle = `${tint}aa`;
       ctx.stroke();
@@ -110,7 +112,7 @@ class KnobFace extends CanvasPanel {
     ctx.fillStyle = '#060a0b';
     ctx.fill();
     ctx.lineWidth = 2;
-    ctx.strokeStyle = k && (this.hover || this.active || this.linked) ? `${tint}aa` : '#1d2a30';
+    ctx.strokeStyle = k && (this.hover || this.active || this.linked || this.tint !== KNOB_TINT) ? `${tint}aa` : '#1d2a30';
     ctx.stroke();
 
     ctx.textAlign = 'center';
@@ -244,7 +246,7 @@ export class KnobSlot implements PointerTarget {
     return this.face.knob;
   }
 
-  /** World anchor for the popover. */
+  /** World position of the knob's cap. */
   anchor(): THREE.Vector3 {
     return this.cap.group.getWorldPosition(new THREE.Vector3());
   }
@@ -272,15 +274,41 @@ export class KnobSlot implements PointerTarget {
     if (prev !== k) this.face.invalidate();
   }
 
+  /** In knob edit mode. */
+  editing = false;
+  /** The BAKE key is at ARM: the knob glows yellow and ignores the pointer. */
+  locked = false;
+
+  /** Edit mode and the BAKE key's lock, from the store. */
+  setMode(editing: boolean, locked: boolean) {
+    if (editing === this.editing && locked === this.locked) return;
+    this.editing = editing;
+    this.locked = locked;
+    if (locked) {
+      clearTimeout(this.clickTimer);
+      this.drag = null;
+      this.rawValue = null;
+      this.face.active = false;
+    }
+    this.face.tint = editing || locked ? KNOB_EDIT_TINT : KNOB_TINT;
+    this.paintIndicator();
+    this.face.invalidate();
+  }
+
+  private paintIndicator() {
+    this.cap.indicatorMat.color.set(this.face.active ? '#ffffff' : this.face.tint);
+    redrawListener.call(this.cap.group);
+  }
+
   private setActive(active: boolean) {
     this.face.active = active;
-    this.cap.indicatorMat.color.set(active ? '#ffffff' : KNOB_TINT);
-    redrawListener.call(this.cap.group);
+    this.paintIndicator();
     this.face.invalidate();
   }
 
   onPointer(e: PanelPointerEvent): boolean | void {
     const k = this.knob;
+    if (this.locked) return;
     if (e.kind === 'hover' || e.kind === 'leave') {
       const h = e.kind === 'hover';
       if (h !== this.face.hover) {
@@ -303,6 +331,8 @@ export class KnobSlot implements PointerTarget {
       this.drag.lastY = e.clientY;
       this.drag.moved += Math.abs(dy);
       if (this.drag.moved < 3) return;
+      // Turning a knob is for its value: it leaves edit mode.
+      if (this.editing) dispatch({ type: 'stopEditingKnob' });
       const fine = e.shiftKey || e.altKey;
       const delta = (dy / DRAG_PX_FULL_RANGE) * (k.max - k.min) * (fine ? 0.1 : 1);
       // Accumulate unquantized so small steps still add up.
@@ -319,23 +349,19 @@ export class KnobSlot implements PointerTarget {
       this.setActive(false);
       if (click) {
         clearTimeout(this.clickTimer);
-        this.clickTimer = setTimeout(() => dispatch({ type: 'openPopover', id: k.id }), 280);
+        // A click toggles edit mode, once it's clear it isn't a double-click.
+        this.clickTimer = setTimeout(() => dispatch(this.editing ? { type: 'stopEditingKnob' } : { type: 'editKnob', id: k.id }), 280);
       }
       return;
     }
     if (e.kind === 'dblclick') {
       clearTimeout(this.clickTimer);
       dispatch({ type: 'resetKnob', id: k.id });
-      return;
-    }
-    if (e.kind === 'contextmenu') {
-      clearTimeout(this.clickTimer);
-      dispatch({ type: 'openPopover', id: k.id });
     }
   }
 
   cursorAt(): string {
-    return this.knob ? 'ns-resize' : 'default';
+    return this.knob && !this.locked ? 'ns-resize' : 'default';
   }
 }
 
@@ -354,15 +380,16 @@ export class KnobBank {
       this.group.add(s.face.mesh, s.cap.group);
     }
     const sync = () => {
-      const knobs = store.getState().project.knobs;
+      const { project, ui } = store.getState();
       for (const s of this.slots) {
-        const k = knobs.find((x) => x.slot === s.slot) ?? null;
+        const k = project.knobs.find((x) => x.slot === s.slot) ?? null;
         s.setKnob(k);
+        s.setMode(!!k && k.id === ui.editKnobId, ui.bakeArmed);
       }
     };
     sync();
     store.subscribe((st, prev) => {
-      if (st.project.knobs !== prev.project.knobs) sync();
+      if (st.project.knobs !== prev.project.knobs || st.ui.editKnobId !== prev.ui.editKnobId || st.ui.bakeArmed !== prev.ui.bakeArmed) sync();
     });
   }
 

@@ -30,5 +30,11 @@ export const COLORS = {
 /** The knobs' tint, shared by every knob, its tube and its parameter in the code. */
 export const KNOB_TINT = COLORS.knobGlow;
 
+/**
+ * What a knob, its parameter and the console's bake hardware turn while it
+ * is being edited or baked: warn yellow, which already means caution.
+ */
+export const KNOB_EDIT_TINT = COLORS.warn;
+
 export const MONO = '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace';
 export const SANS = '"Inter", "SF Pro Text", system-ui, -apple-system, "Segoe UI", sans-serif';

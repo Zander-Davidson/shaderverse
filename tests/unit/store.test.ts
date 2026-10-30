@@ -121,6 +121,64 @@ describe('store actions', () => {
   });
 });
 
+describe('control board state', () => {
+  const two = () => store(WITH(', in float a, in float b').replace('0.5, 0.25', 'a, b'));
+  const ids = (s: ReturnType<typeof store>) => s.getState().project.knobs.map((k) => k.id);
+
+  it('edit mode moves between knobs and stops', () => {
+    const s = two();
+    const [a, b] = ids(s);
+    s.getState().dispatch({ type: 'editKnob', id: a! });
+    expect(s.getState().ui.editKnobId).toBe(a);
+    s.getState().dispatch({ type: 'editKnob', id: b! });
+    expect(s.getState().ui.editKnobId).toBe(b);
+    s.getState().dispatch({ type: 'stopEditingKnob' });
+    expect(s.getState().ui.editKnobId).toBeNull();
+    expect(s.getState().dispatch({ type: 'editKnob', id: 'nope' }).ok).toBe(false);
+  });
+
+  it('edit mode ends when its knob is baked or leaves the source', () => {
+    const s = two();
+    const [a, b] = ids(s);
+    s.getState().dispatch({ type: 'editKnob', id: a! });
+    s.getState().dispatch({ type: 'deleteKnob', id: a! });
+    expect(s.getState().ui.editKnobId).toBeNull();
+    s.getState().dispatch({ type: 'editKnob', id: b! });
+    s.getState().dispatch({ type: 'setSource', source: BASE });
+    expect(s.getState().ui.editKnobId).toBeNull();
+  });
+
+  it('arming the BAKE key ends edit mode and locks it out', () => {
+    const s = two();
+    const [a] = ids(s);
+    s.getState().dispatch({ type: 'editKnob', id: a! });
+    s.getState().dispatch({ type: 'setBakeArmed', armed: true });
+    expect(s.getState().ui).toMatchObject({ editKnobId: null, bakeArmed: true });
+    expect(s.getState().dispatch({ type: 'editKnob', id: a! }).ok).toBe(false);
+  });
+
+  it('bakeAllKnobs is refused unless armed', () => {
+    const s = two();
+    const before = s.getState().project.source;
+    expect(s.getState().dispatch({ type: 'bakeAllKnobs' }).ok).toBe(false);
+    expect(s.getState().project.source).toBe(before);
+  });
+
+  it('bakeAllKnobs bakes every knob in one source change', () => {
+    const s = two();
+    const [a, b] = ids(s);
+    s.getState().dispatch({ type: 'setKnobValue', id: a!, value: 0.5 });
+    s.getState().dispatch({ type: 'setKnobValue', id: b!, value: 0.25 });
+    s.getState().dispatch({ type: 'setBakeArmed', armed: true });
+    const log = s.getState().log.length;
+    expect(s.getState().dispatch({ type: 'bakeAllKnobs' }).ok).toBe(true);
+    expect(s.getState().project.knobs).toHaveLength(0);
+    expect(s.getState().project.source).toBe(BASE);
+    expect(s.getState().log.length).toBe(log + 1);
+    expect(s.getState().ui.bakeArmed).toBe(true);
+  });
+});
+
 describe('schema', () => {
   it('round-trips through export and import', () => {
     const s = store(WITH(', in float a'));

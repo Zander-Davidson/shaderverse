@@ -20,7 +20,8 @@ import { COLORS, MONO } from '../theme';
 import type { KnobBank } from '../knobs/knobs';
 import { KNOB_SLOTS } from '../project/schema';
 import { buildBoard, FACE_HOLES } from './board';
-import { BAKE_ALL, BAKE_KEY, BUBBLE_Y, BUTTON_Y, CAPTION_Y, consoleControls, KNOB_Y, knobLocal, LEGEND_Y, ROW_X, SECTIONS, type Control } from './plan';
+import { EditDisplay } from './editDisplay';
+import { BAKE_ALL, BAKE_KEY, BUBBLE_Y, BUTTON_Y, CAPTION_Y, consoleControls, EDIT_DISPLAY, KNOB_Y, knobLocal, LEGEND_Y, ROW_X, SECTIONS, type Control } from './plan';
 
 const PX_PER_UNIT = 220;
 const BEZEL = Math.round(0.16 * PX_PER_UNIT);
@@ -157,15 +158,18 @@ class ConsoleControl implements PointerTarget {
 
 export class ConsolePanel extends MonitorPanel {
   readonly controls: ConsoleControl[];
-  readonly board = buildBoard(KNOB_SLOTS);
+  readonly board: ReturnType<typeof buildBoard>;
 
   constructor(
     cfg: LayoutConfig,
     private readonly store: ProjectStore,
     knobs: KnobBank,
+    /** Screen position of a world point, for the edit display's input layer. */
+    project: ((p: THREE.Vector3) => { x: number; y: number }) | null = null,
   ) {
     const c = cfg.console;
     super(c, Math.round(c.w * PX_PER_UNIT), Math.round(c.h * PX_PER_UNIT), 'plate');
+    this.board = buildBoard(KNOB_SLOTS, new EditDisplay(store, EDIT_DISPLAY, project));
     this.reshape(cfg);
     this.hang(cfg, c);
     this.rig.add(knobs.group);
@@ -191,7 +195,18 @@ export class ConsolePanel extends MonitorPanel {
 
   override update(): void {
     super.update();
-    this.board.display.update();
+    this.board.display.screen.update();
+  }
+
+  /** The face lets the pointer through its holes, to the display and buttons sunk in them. */
+  override hitTest(x: number, y: number): boolean {
+    if (!super.hitTest(x, y)) return false;
+    const u = (x - this.pixelWidth / 2) / PX_PER_UNIT;
+    const v = (this.pixelHeight / 2 - y) / PX_PER_UNIT;
+    const d = FACE_HOLES.display;
+    if (Math.abs(u - d.x) < d.w / 2 && Math.abs(v - d.y) < d.h / 2) return false;
+    if (Math.hypot(u - BAKE_ALL.x, v - BAKE_ALL.y) < FACE_HOLES.bakeAll) return false;
+    return !Array.from({ length: KNOB_SLOTS }, (_, i) => knobLocal(i)[0]).some((bx) => Math.hypot(u - bx, v - BUBBLE_Y) < FACE_HOLES.bubble);
   }
 
   /** The controls that take the pointer (lamps don't). */

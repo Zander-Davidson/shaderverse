@@ -46,10 +46,10 @@ export class SceneEditor {
       }
     });
 
-    // Leaving the editor: a click anywhere outside the canvas and popover.
+    // Leaving the editor: a click anywhere outside the canvas.
     document.addEventListener('pointerdown', (e) => {
       if (!this.isOpen || e.target instanceof HTMLCanvasElement) return;
-      if (!(e.target as HTMLElement).closest('.sv-popover')) this.close();
+      this.close();
     });
     // Typing anywhere returns focus to the editor while it's open.
     window.addEventListener('keydown', (e) => {
