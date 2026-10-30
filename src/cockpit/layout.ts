@@ -167,7 +167,7 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
   // keyboard tray. Its arms drop behind the monitor columns, clear of the
   // portal, and reach in to its back edge.
   console: {
-    w: 10.7, h: 2.7, at: [-0.12, -1.76, 3.42], scale: 0.43, yaw: 1.5, pitch: -38, roll: 0.6,
+    w: 10.7, h: 2.7, at: [-0.09, -1.86, 3.42], scale: 0.33, yaw: 1.5, pitch: -38, roll: 0.6,
     arms: [
       { mount: -3.2, elbow: [-2.8, -1.1, 5.3], attach: [-2.15, 0.7] },
       { mount: 3.35, elbow: [2.9, -1.35, 5.25], attach: [3.15, 0.6] },
