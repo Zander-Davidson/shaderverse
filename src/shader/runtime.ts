@@ -7,7 +7,7 @@ import { compileShader, type CompileResult } from './compile';
 import { VERTEX_SHADER, VIEW_ZOOM_UNIFORM, knobUniformName, type WrapperParam } from './wrapper';
 
 /** Each quality's pixel count, as the side of a square of the same area. */
-export const QUALITY_SIZES = { low: 384, medium: 640, high: 1024 } as const;
+export const QUALITY_SIZES = { low: 384, medium: 1024, high: 1536 } as const;
 export type Quality = keyof typeof QUALITY_SIZES;
 
 export class ShaderRuntime {
