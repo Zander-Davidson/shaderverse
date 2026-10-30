@@ -39,33 +39,60 @@ test('dragging a knob changes the image without recompiling', async ({ page }) =
   expect(r1!).toBeGreaterThan(r0! + 80);
 });
 
-test('double-click resets; the popover renames and bakes', async ({ page }) => {
+test('double-click resets; a click edits the knob on the console display', async ({ page }) => {
   const p = await page.evaluate(() => (window as any).__sv.knobPoint(0));
   await page.mouse.dblclick(p.x, p.y);
   await expect.poll(async () => (await state(page)).project.knobs[0].value).toBe(0);
+  expect((await state(page)).ui.editKnobId).toBeNull();
 
+  await page.mouse.click(p.x, p.y);
+  const id = (await state(page)).project.knobs[0].id;
+  await expect.poll(async () => (await state(page)).ui.editKnobId).toBe(id);
+  // Right-click no longer does anything.
   await page.mouse.click(p.x, p.y, { button: 'right' });
-  const pop = page.locator('.sv-popover');
-  await expect(pop).toBeVisible();
-  await pop.locator('input[name=param]').fill('crimson');
-  await pop.locator('input[name=param]').press('Enter');
+  await page.waitForTimeout(350);
+  expect((await state(page)).ui.editKnobId).toBe(id);
+
+  const field = async (f: string) => {
+    const q = await page.evaluate((f) => (window as any).__sv.displayPoint(f), f);
+    await page.mouse.click(q.x, q.y);
+    await page.keyboard.press('ControlOrMeta+a');
+  };
+  await field('param');
+  await page.keyboard.type('crimson');
+  await page.keyboard.press('Enter');
   await expect.poll(async () => (await state(page)).project.knobs[0].param).toBe('crimson');
-  let s = await state(page);
+  const s = await state(page);
   expect(s.project.source).toContain('in float crimson)');
   expect(s.project.source).toContain('vec4(crimson,');
   expect(s.project.knobs[0].label).toBe('crimson');
 
-  await pop.locator('input[name=max]').fill('5');
-  await pop.locator('input[name=max]').press('Enter');
+  await field('max');
+  await page.keyboard.type('5');
+  await page.keyboard.press('Enter');
   await expect.poll(async () => (await state(page)).project.knobs[0].max).toBe(5);
 
-  await page.evaluate((id) => (window as any).__sv.store.getState().dispatch({ type: 'setKnobValue', id, value: 0.75 }), s.project.knobs[0].id);
-  await pop.locator('.sv-pop-delete').click();
-  await expect.poll(async () => (await state(page)).project.knobs.length).toBe(0);
-  s = await state(page);
-  expect(s.project.source).toContain('void mainImage(out vec4 fragColor, in vec2 fragCoord)');
-  expect(s.project.source).toContain('vec4(0.75,');
-  await expect(pop).toBeHidden();
+  // A refused edit keeps the field; Escape reverts it, and a second leaves edit mode.
+  await field('min');
+  await page.keyboard.type('9');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(100);
+  expect((await state(page)).project.knobs[0].min).toBe(0);
+  await page.keyboard.press('Escape');
+  expect((await state(page)).ui.editKnobId).toBe(id);
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await state(page)).ui.editKnobId).toBeNull();
+});
+
+test('turning a knob leaves edit mode', async ({ page }) => {
+  const p = await page.evaluate(() => (window as any).__sv.knobPoint(0));
+  await page.mouse.click(p.x, p.y);
+  await expect.poll(async () => (await state(page)).ui.editKnobId).not.toBeNull();
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 4; i++) await page.mouse.move(p.x, p.y - i * 10);
+  await page.mouse.up();
+  await expect.poll(async () => (await state(page)).ui.editKnobId).toBeNull();
 });
 
 test('reloading restores the project', async ({ page }) => {

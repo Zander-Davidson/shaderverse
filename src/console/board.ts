@@ -4,16 +4,15 @@
 // display's glass, each bubble's well, and the bake all button's well.
 
 import * as THREE from 'three';
-import { CanvasPanel } from '../panels/panel';
 import { chromeMaterial } from '../style/console';
 import { LOW_GFX, physicalMaterial } from '../style/quality';
+import type { EditDisplay } from './editDisplay';
 import { BAKE_ALL, BAKE_KEY, BUBBLE_R, BUBBLE_Y, EDIT_DISPLAY, knobLocal } from './plan';
 
 /** How far the edit display's glass sits below the console's face. */
 export const DISPLAY_DEPTH = 0.07;
 /** Depth of a bubble's well, and of the bake all button's. */
 const WELL_DEPTH = 0.07;
-const DISPLAY_PX_PER_UNIT = 300;
 
 /** Rounded rectangle path, centered, in panel units. */
 function roundedRect(path: THREE.Path, w: number, h: number, r: number): THREE.Path {
@@ -171,17 +170,18 @@ export class BakeKey {
   }
 }
 
-/** The knob edit display: its own canvas on glass sunk into the face, in a rolled bezel. */
-export class EditDisplay extends CanvasPanel {
+/** The knob edit display's bay: its screen on glass sunk into the face, in a rolled bezel. */
+export class DisplayBay {
   readonly group = new THREE.Group();
-  constructor(mats: Mats) {
+
+  constructor(
+    readonly screen: EditDisplay,
+    mats: Mats,
+  ) {
     const d = EDIT_DISPLAY;
-    super({ x: 0, y: 0, w: d.w, h: d.h }, Math.round(d.w * DISPLAY_PX_PER_UNIT), Math.round(d.h * DISPLAY_PX_PER_UNIT), 0, 0);
     this.group.position.set(d.x, d.y, 0);
-    this.mesh.position.z = -DISPLAY_DEPTH;
-    this.material.alphaTest = 0;
-    this.material.transparent = false;
-    // The recess: walls from the face down to the glass, their top edge
+    screen.group.position.z = -DISPLAY_DEPTH;
+    // The recess: walls from the face down to the screen, their top edge
     // rolled over into the face like the monitors' bezels.
     const h = FACE_HOLES.display;
     const lip = new THREE.Shape();
@@ -191,7 +191,6 @@ export class EditDisplay extends CanvasPanel {
       new THREE.ExtrudeGeometry(lip, { depth: DISPLAY_DEPTH - 0.02, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 5, curveSegments: 16 }),
       mats.chrome,
     );
-    // The bevel's top rounds over level with the face; the wall drops to the glass.
     rim.position.z = -DISPLAY_DEPTH;
     const glass = new THREE.Mesh(
       new THREE.PlaneGeometry(d.w, d.h),
@@ -200,32 +199,15 @@ export class EditDisplay extends CanvasPanel {
     glass.position.z = -DISPLAY_DEPTH + 0.004;
     glass.raycast = () => {};
     rim.raycast = () => {};
-    this.group.add(this.mesh, rim, glass);
-  }
-
-  protected override geometryFor(): THREE.BufferGeometry {
-    return new THREE.PlaneGeometry(this.rect.w, this.rect.h);
-  }
-
-  protected draw(ctx: CanvasRenderingContext2D): void {
-    const W = this.pixelWidth;
-    const H = this.pixelHeight;
-    // Powered down: dark glass, a faint scanline texture, a dim sheen.
-    const g = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.5, W * 0.75);
-    g.addColorStop(0, '#0b1313');
-    g.addColorStop(1, '#030606');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(120, 160, 160, 0.035)';
-    for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 1);
+    this.group.add(screen.group, rim, glass);
   }
 }
 
 /** Everything in the bays and the bubble row, built with one set of materials. */
-export function buildBoard(slots: number) {
+export function buildBoard(slots: number, screen: EditDisplay) {
   const mats = materials();
   return {
-    display: new EditDisplay(mats),
+    display: new DisplayBay(screen, mats),
     bubbles: Array.from({ length: slots }, (_, i) => new BakeBubble(i, mats)),
     bakeAll: new BakeAllButton(mats),
     key: new BakeKey(mats),

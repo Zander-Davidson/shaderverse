@@ -37,7 +37,7 @@ const SQUEEZE = [1, 0.85, 0.7];
 /** Turned to a side, how much of the portal's radius the companion keeps clear of. */
 const SIDE_RIM = 0.85;
 /** Overlays the companion keeps clear of while they show. */
-const OVERLAYS = '.sv-popover, .sv-editor, .sv-knob-button, .sv-help-box';
+const OVERLAYS = '.sv-editor, .sv-knob-button, .sv-help-box';
 
 export interface CompanionDeps {
   cockpit: Cockpit;

@@ -90,7 +90,8 @@ test('clicking the portal leans in until the portal and knobs fill the view; Esc
   await expect.poll(() => page.evaluate(() => (window as any).__sv.store.getState().ui.lean)).toBe(true);
   await expect.poll(() => page.evaluate(() => (window as any).__sv.cockpit.leaning), { timeout: 15_000 }).toBe(false);
   const leaned = await knobSpan();
-  expect(leaned).toBeGreaterThan(sitting * 1.4);
+  // Less than it could: the view keeps the console's bays in, either side.
+  expect(leaned).toBeGreaterThan(sitting * 1.25);
   expect(leaned).toBeLessThan(0.95); // the outer knobs stay on screen
 
   // Knobs keep working while leaned in, without leaning out.

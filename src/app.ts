@@ -17,7 +17,6 @@ import { showBoot } from './overlays/boot';
 import { SceneEditor } from './editor/sceneEditor';
 import { EditorOverlay } from './overlays/editor';
 import { HelpOverlay, toast } from './overlays/help';
-import { KnobPopover } from './overlays/popover';
 import { screenBounds, screenPoint, type ScreenRect } from './panels/bounds';
 import { CodePanel } from './panels/code';
 import { onPanelRedraw } from './panels/panel';
@@ -117,7 +116,7 @@ export function startApp(root: HTMLElement): void {
   const library = new LibraryPanel(cfg, store, libraryActions);
   const knobs = new KnobBank(store);
   // The hanging control console: the knobs, playback and quality buttons.
-  const controls = new ConsolePanel(cfg, store, knobs);
+  const controls = new ConsolePanel(cfg, store, knobs, (p) => screenPoint(p, cockpit.camera, canvas));
   // Knobs and their parameters in the code light each other up.
   knobs.onHover = (k) => code.setLinkedParam(k?.param ?? null);
   code.onKnobParamHover = (param) => knobs.highlight(param);
@@ -151,6 +150,7 @@ export function startApp(root: HTMLElement): void {
   router.add(library);
   for (const s of knobs.slots) router.add(s);
   for (const t of controls.targets) router.add(t);
+  router.add(controls.board.display.screen);
   // Its bare face just stops the pointer; the knobs and buttons stand in
   // front of it, so they're picked first.
   router.add(controls);
@@ -176,11 +176,6 @@ export function startApp(root: HTMLElement): void {
     }
     return { code: c, portal: p };
   };
-  const popover = new KnobPopover(store, (id) => {
-    const k = store.getState().project.knobs.find((x) => x.id === id);
-    const slot = k && knobs.slots[k.slot];
-    return slot ? screenPoint(slot.anchor(), cockpit.camera, canvas) : null;
-  });
   portal.onClick = () => {
     const s = store.getState();
     s.dispatch({ type: 'setLean', lean: !s.ui.lean });
@@ -189,7 +184,6 @@ export function startApp(root: HTMLElement): void {
     // Clicking empty space while leaned in sits back.
     if (!target && store.getState().ui.lean) store.getState().dispatch({ type: 'setLean', lean: false });
     if (!editor.ownsCanvasTarget(target)) editor.close();
-    popover.close();
     helpOverlay.hide();
   };
 
@@ -221,6 +215,9 @@ export function startApp(root: HTMLElement): void {
     }
     if (s.ui.restartCount !== prev.ui.restartCount) runtime.restart();
     if (s.ui.lean !== prev.ui.lean) cockpit.setLean(s.ui.lean);
+    if (s.ui.editKnobId !== prev.ui.editKnobId || s.project.knobs !== prev.project.knobs) {
+      code.setEditParam(s.project.knobs.find((k) => k.id === s.ui.editKnobId)?.param ?? null);
+    }
     if (s.project.id !== prev.project.id) runtime.restart();
   });
 
@@ -231,7 +228,7 @@ export function startApp(root: HTMLElement): void {
     return el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !!el.closest('.cm-editor');
   };
   window.addEventListener('keydown', (e) => {
-    if (typing(e) || editor.isOpen || popover.isOpen || e.metaKey || e.ctrlKey || e.altKey) {
+    if (typing(e) || editor.isOpen || e.metaKey || e.ctrlKey || e.altKey) {
       if (e.key === 'Escape' && helpOverlay.isOpen) helpOverlay.hide();
       return;
     }
@@ -240,6 +237,12 @@ export function startApp(root: HTMLElement): void {
     if (library.confirming !== null && !helpOverlay.isOpen && (e.key === 'Escape' || e.key === 'Enter')) {
       if (e.key === 'Enter') library.confirm();
       else library.cancel();
+      e.preventDefault();
+      return;
+    }
+    // Escape leaves knob edit mode next (a display field takes its own Escape).
+    if (e.key === 'Escape' && !helpOverlay.isOpen && s.ui.editKnobId) {
+      s.dispatch({ type: 'stopEditingKnob' });
       e.preventDefault();
       return;
     }
@@ -389,7 +392,7 @@ export function startApp(root: HTMLElement): void {
   // Handles for browser tests and debugging; not part of any public API.
   Object.assign(window, {
     __sv: {
-      store, runtime, router, cockpit, companion, code, plot, status, library, portal, knobs, editor, popover, canvas, renderer, relayout, cfg, compositor,
+      store, runtime, router, cockpit, companion, code, plot, status, library, portal, knobs, editor, canvas, renderer, relayout, cfg, compositor,
       knobPoint: (slot: number) => screenPoint(knobs.slots[slot]!.anchor(), cockpit.camera, canvas),
       controls,
       /** Screen point of a console control, by id. */
@@ -397,6 +400,8 @@ export function startApp(root: HTMLElement): void {
         const c = controls.controls.find((x) => x.control.id === id)!;
         return screenPoint(c.group.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas);
       },
+      /** Screen point of a field (or RESET VALUE) on the knob edit display. */
+      displayPoint: (id: string) => screenPoint(controls.board.display.screen.pointOf(id as 'label'), cockpit.camera, canvas),
       bounds: overlayBounds,
       /** Screen point of a button on the library monitor, by id. */
       libraryPoint: (id: string) => {

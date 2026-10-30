@@ -172,7 +172,7 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
       { mount: -3.2, elbow: [-2.8, -1.1, 5.3], attach: [-2.15, 0.7] },
       { mount: 3.35, elbow: [2.9, -1.35, 5.25], attach: [3.15, 0.6] },
     ],
-    lean: { at: [-0.12, -1.2, 4.0], pitch: -32 },
+    lean: { at: [-0.09, -1.2, 4.0], pitch: -32 },
   },
   companion: {
     size: 1.1,
@@ -185,8 +185,9 @@ export const DEFAULT_LAYOUT: LayoutConfig = {
       // above the console; else up high on that side.
       left: [{ x: -2.4, y: -3.0 }, { x: -5.5, y: 6.0 }, { x: -6.5, y: 6.0 }],
       right: [{ x: 3.35, y: -2.8 }, { x: 3.5, y: 5.5 }, { x: -4.5, y: 3.5 }],
-      // Leaned in: beside the bezel, left or right of the portal.
-      lean: [{ x: 6.0, y: 1.0 }, { x: -6.0, y: 1.0 }, { x: 6.0, y: -3.0 }],
+      // Leaned in: in the gap between the portal and the monitors either
+      // side, which stay in view now that the whole console must.
+      lean: [{ x: 4.5, y: 1.0 }, { x: -4.5, y: 1.0 }, { x: 4.5, y: -1.5 }],
     },
   },
 };

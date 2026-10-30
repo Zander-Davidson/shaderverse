@@ -15,7 +15,7 @@ import { isMac, type EditorSession } from '../editor/session';
 import type { ProjectStore } from '../project/store';
 import { functionAt, interactiveTokens, type FunctionHit } from '../source/functions';
 import { tokenize, type TokenType } from '../source/tokenizer';
-import { COLORS, KNOB_TINT, MONO } from '../theme';
+import { COLORS, KNOB_EDIT_TINT, KNOB_TINT, MONO } from '../theme';
 import { type PanelPointerEvent } from './panel';
 import { MonitorPanel } from './monitor';
 import { PanelShape } from './shape';
@@ -80,6 +80,15 @@ export class CodePanel extends MonitorPanel {
   setLinkedParam(param: string | null) {
     if (param === this.linkedParam) return;
     this.linkedParam = param;
+    this.invalidate();
+  }
+
+  /** The parameter of the knob in edit mode, drawn in the edit yellow. */
+  private editParam: string | null = null;
+
+  setEditParam(param: string | null) {
+    if (param === this.editParam) return;
+    this.editParam = param;
     this.invalidate();
   }
 
@@ -407,11 +416,12 @@ export class CodePanel extends MonitorPanel {
         if (x > W) break;
         const isKnob = seg.type === 'identifier' && knobParams.has(seg.text);
         const linked = isKnob && (seg.text === this.linkedParam || seg.text === this.paramHover);
+        const tint = isKnob && seg.text === this.editParam ? KNOB_EDIT_TINT : KNOB_TINT;
         if (isKnob) {
-          ctx.fillStyle = linked ? `${KNOB_TINT}70` : `${KNOB_TINT}30`;
+          ctx.fillStyle = linked ? `${tint}70` : `${tint}30`;
           ctx.fillRect(x - 2, y + 4, w + 4, CODE_LINE_PX - 8);
         }
-        const glow = linked ? '#eafff8' : isKnob ? KNOB_TINT : seg.glow;
+        const glow = linked ? (tint === KNOB_TINT ? '#eafff8' : '#fff4d6') : isKnob ? tint : seg.glow;
         if (seg.type === 'whitespace') continue;
         if (glow) {
           // Interactive: bright, with a glow, against the muted syntax colors.
