@@ -292,7 +292,9 @@ loading a project or undoing resets them correctly.
 -   **Knob bubbles** are hinged at their back edge like the bake all
     guard, and spring open (snapping past open and settling back) rather
     than sliding away; they close eased, like the guard. The resin is
-    drawn on both sides, so a flipped-open dome still shows.
+    drawn on both sides, so a flipped-open dome still shows. Each dome's
+    hinge axis stands a little above the face on a chrome mount, so a dome
+    tipped past upright keeps its bulge clear of the face behind it.
 -   **Key labels:** ARM is engraved above the key, where its head points
     once turned, and OFF to its right, along the head at rest.
 -   **Bake buttons** rise in their wells and glow faintly when uncovered,

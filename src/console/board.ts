@@ -134,12 +134,7 @@ export class BakeBubble implements PointerTarget {
     this.rest = this.button.position.z = -WELL_DEPTH + 0.025;
     const r = FACE_HOLES.bubble * 1.02;
     const dome = bubble(r, BUBBLE_R * 0.85, mats);
-    dome.position.y = -r;
-    this.guard.position.y = r;
-    this.guard.add(dome);
-    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, r * 0.9, 12).rotateZ(Math.PI / 2), mats.chrome);
-    hinge.position.set(0, r + 0.006, 0.01);
-    this.group.add(this.button, this.guard, hinge);
+    this.group.add(this.button, this.guard, ...hingeDome(this.guard, dome, r, 0.014, mats));
     this.group.traverse((o) => (o.raycast = () => {}));
     this.button.raycast = THREE.Mesh.prototype.raycast;
   }
@@ -247,14 +242,8 @@ export class BakeAllButton implements PointerTarget {
     this.rest = this.button.position.z = -WELL_DEPTH + 0.04;
     const r = FACE_HOLES.bakeAll * 1.04;
     const dome = bubble(r, BAKE_ALL.r * 0.95, mats);
-    dome.position.y = -r;
-    this.guard.position.y = r;
-    this.guard.add(dome);
     this.group.add(seam(r, mats));
-    // A small chrome hinge barrel along the back edge.
-    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, r * 0.9, 16).rotateZ(Math.PI / 2), mats.chrome);
-    hinge.position.set(0, r + 0.01, 0.02);
-    this.group.add(this.button, this.guard, hinge);
+    this.group.add(this.button, this.guard, ...hingeDome(this.guard, dome, r, 0.03, mats));
     this.group.traverse((o) => (o.raycast = () => {}));
     this.button.raycast = THREE.Mesh.prototype.raycast;
   }
@@ -325,6 +314,29 @@ const GUARD_S = 0.35;
 const SPRING_S = 0.55;
 /** How far a guard swings open: a little past upright. */
 const GUARD_OPEN = 1.95;
+/**
+ * How far a dome's hinge axis stands above the face, as a fraction of its
+ * radius: enough that, tipped past upright (a knob bubble's spring
+ * overshoots to about 140°), its bulge stays clear of the face behind it.
+ */
+const HINGE_LIFT = 0.24;
+
+/**
+ * Hangs `dome` (radius `r`) from `guard`, hinged at its back edge on an axis
+ * raised off the face, with a chrome barrel on a small mount there.
+ */
+function hingeDome(guard: THREE.Group, dome: THREE.Object3D, r: number, barrel: number, mats: Mats): THREE.Object3D[] {
+  const lift = HINGE_LIFT * r;
+  guard.position.set(0, r, lift);
+  // Closed, the dome still sits on the face.
+  dome.position.set(0, -r, -lift);
+  guard.add(dome);
+  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(barrel, barrel, r * 0.9, 16).rotateZ(Math.PI / 2), mats.chrome);
+  hinge.position.set(0, r, lift);
+  const mount = new THREE.Mesh(new THREE.BoxGeometry(r * 0.9, barrel * 1.6, lift), mats.chrome);
+  mount.position.set(0, r, lift / 2);
+  return [hinge, mount];
+}
 
 /** A guard's angle on its hinge, `open` of the way: up and back, easing in and out. */
 const guardAngle = (open: number) => -GUARD_OPEN * open * open * (3 - 2 * open);
