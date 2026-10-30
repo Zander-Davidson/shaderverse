@@ -25,6 +25,7 @@ export interface PanelPointerEvent {
   altKey: boolean;
   metaKey: boolean;
   ctrlKey: boolean;
+  deltaX: number;
   deltaY: number;
   /** True when the pointer is captured by this panel (dragging off it). */
   captured: boolean;

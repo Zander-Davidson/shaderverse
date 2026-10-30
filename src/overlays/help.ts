@@ -15,7 +15,7 @@ const SHORTCUTS: [string, string][] = [
   ['Knob: click or right-click', 'Edit label, name, range; delete'],
   ['Portal: click', 'Lean in to the portal and knobs; click again or Esc to sit back'],
   ['Portal: drag', 'Mouse input to the shader (iMouse)'],
-  ['Code display: wheel', 'Scroll'],
+  ['Code display: wheel', 'Scroll (Shift or swipe sideways for long lines)'],
 ];
 
 export class HelpOverlay {

@@ -86,8 +86,10 @@ export class CodePanel extends MonitorPanel {
   /** Called when the hovered function name changes. */
   onFunctionHover: ((hit: FunctionHit | null) => void) | null = null;
   private charW = 16;
-  /** Horizontal scroll, in display columns (editing only). */
+  /** Horizontal scroll, in display columns. */
   private scrollCol = 0;
+  /** Display width of the longest line, for `lines`. */
+  private widest = 0;
   private blinkOn = true;
   private lastBlink = 0;
   private drag: { anchor: number } | null = null;
@@ -267,7 +269,14 @@ export class CodePanel extends MonitorPanel {
     }
     this.lines = lines;
     this.linesFor = src;
+    this.widest = Math.max(0, ...src.split('\n').map((l) => columnOf(l, l.length)));
     return lines;
+  }
+
+  /** Furthest the text can scroll right, in display columns. */
+  private get maxScrollCol(): number {
+    this.splitLines(this.text);
+    return Math.max(0, this.widest - this.visibleCols + 2);
   }
 
   protected draw(ctx: CanvasRenderingContext2D): void {
@@ -282,7 +291,9 @@ export class CodePanel extends MonitorPanel {
     if (compile.source === text) {
       for (const e of compile.errors) if (e.line !== null && !errorLines.has(e.line)) errorLines.set(e.line, e.message);
     }
-    const scrollCol = editing ? this.scrollCol : 0;
+    // The text may have shrunk; while editing, revealHead keeps the caret in view.
+    if (!editing) this.scrollCol = Math.min(this.scrollCol, this.maxScrollCol);
+    const scrollCol = this.scrollCol;
 
     // Frame
     const edge = editing ? '#2f6a85' : this.hovering ? '#2f4656' : COLORS.panelEdge;
@@ -503,9 +514,21 @@ export class CodePanel extends MonitorPanel {
       ctx.fillStyle = '#3c5262';
       ctx.fillRect(8, Math.min(y, top + trackH - h), 4, h);
     }
-    if (editing && scrollCol > 0) {
+    if (scrollCol > 0) {
       ctx.fillStyle = '#3c5262';
       ctx.fillRect(TEXT_X - 4, top, 3, visible * CODE_LINE_PX);
+    }
+    const cols = this.visibleCols;
+    if (this.widest > cols) {
+      // Under the text, from the gutter to the curved cut.
+      const ty = top + visible * CODE_LINE_PX + 6;
+      const trackW = this.rowRight(ty - CODE_LINE_PX) - TEXT_X;
+      const w = Math.max(30, (trackW * cols) / this.widest);
+      const x = TEXT_X + ((trackW - w) * Math.min(scrollCol, this.maxScrollCol)) / Math.max(1, this.maxScrollCol);
+      ctx.fillStyle = '#1d2a35';
+      ctx.fillRect(TEXT_X, ty, trackW, 4);
+      ctx.fillStyle = '#3c5262';
+      ctx.fillRect(x, ty, w, 4);
     }
 
     // Footer: editor hint, compile errors, then analysis notes.
@@ -542,7 +565,7 @@ export class CodePanel extends MonitorPanel {
     const lineText = text.split('\n')[lineIdx] ?? '';
     const ch = pos - (before.lastIndexOf('\n') + 1);
     const row = lineIdx - this.store.getState().ui.codeScrollLine;
-    const scrollCol = this.editing ? this.scrollCol : 0;
+    const scrollCol = this.scrollCol;
     return {
       x: this.ox + TEXT_X + (columnOf(lineText, ch) - scrollCol + 0.5) * this.charW,
       y: this.oy + HEADER + PAD + (row + 0.5) * CODE_LINE_PX,
@@ -568,8 +591,9 @@ export class CodePanel extends MonitorPanel {
     const max = Math.max(0, count - this.visibleLines + 2);
     const next = Math.min(max, Math.max(0, ui.codeScrollLine + lines));
     if (next !== ui.codeScrollLine) this.store.getState().dispatch({ type: 'setCodeScroll', line: next });
-    if (cols && this.editing) {
-      this.scrollCol = Math.max(0, this.scrollCol + cols);
+    const col = Math.min(this.maxScrollCol, Math.max(0, this.scrollCol + cols));
+    if (col !== this.scrollCol) {
+      this.scrollCol = col;
       this.invalidate();
     }
   }
@@ -582,7 +606,7 @@ export class CodePanel extends MonitorPanel {
     const n = this.store.getState().ui.codeScrollLine + row;
     const line = lines[n];
     if (line === undefined) return null;
-    const scrollCol = this.editing ? this.scrollCol : 0;
+    const scrollCol = this.scrollCol;
     // The cell containing the column, not the nearest boundary.
     const ch = offsetAt(line, (px - this.ox - TEXT_X) / this.charW + scrollCol - 0.5);
     if (ch >= line.length) return null;
@@ -629,7 +653,9 @@ export class CodePanel extends MonitorPanel {
     }
     if (e.kind === 'wheel') {
       const step = (d: number) => Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / 40));
-      if (e.shiftKey) this.scrollBy(0, step(e.deltaY) * 4);
+      // Sideways: Shift+wheel, or a trackpad swipe that's mostly horizontal.
+      if (e.shiftKey) this.scrollBy(0, step(e.deltaY || e.deltaX) * 4);
+      else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) this.scrollBy(0, step(e.deltaX) * 4);
       else this.scrollBy(step(e.deltaY));
       return true;
     }
