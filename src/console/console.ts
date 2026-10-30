@@ -355,8 +355,9 @@ export class ConsolePanel extends MonitorPanel {
     ctx.font = `700 18px ${MONO}`;
     ctx.fillStyle = COLORS.dim;
     const kr = BAKE_KEY.r + 0.12;
-    ctx.fillText('OFF', px(BAKE_KEY.x), py(BAKE_KEY.y + kr + 0.01) - 2);
-    ctx.fillText('ARM', px(BAKE_KEY.x + kr + 0.13), py(BAKE_KEY.y));
+    // The key's head lies across at OFF and stands up its quarter turn later at ARM.
+    ctx.fillText('ARM', px(BAKE_KEY.x), py(BAKE_KEY.y + kr + 0.01) - 2);
+    ctx.fillText('OFF', px(BAKE_KEY.x + kr + 0.13), py(BAKE_KEY.y));
     ctx.fillStyle = '#5a6a72';
     ctx.fillRect(px(BAKE_KEY.x) - 2, py(BAKE_KEY.y + kr - 0.05), 4, 0.07 * PX_PER_UNIT);
     ctx.fillRect(px(BAKE_KEY.x + kr - 0.05), py(BAKE_KEY.y) - 2, 0.07 * PX_PER_UNIT, 4);

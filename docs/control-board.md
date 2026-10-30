@@ -158,9 +158,9 @@ Each knob has a small bubble beneath its label strip.
     of the console body either: a separate fitted part, with a thin
     seam where it meets the face. Empty slots have a bubble too, so the
     row stays regular.
--   **Unsheathing.** When its knob enters edit mode, the bubble slides
-    down and back into the console (about 250 ms, easing out), leaving
-    a little red button standing in a shallow well.
+-   **Unsheathing.** When its knob enters edit mode, the bubble flips up
+    on a hinge at its back edge, spring-loaded, leaving a little red
+    button standing in a shallow well.
 -   **Pressing.** The red button clears the knob and bakes its current
     value into the code (the store's `deleteKnob`). It presses down
     like the other console buttons; on release the knob's cap retracts,
@@ -289,6 +289,12 @@ loading a project or undoing resets them correctly.
     shift the library uses for its confirm page.
 -   **One name field.** LABEL and NAME are merged into NAME, which sets
     both the parameter and the strip's label.
+-   **Knob bubbles** are hinged at their back edge like the bake all
+    guard, and spring open (snapping past open and settling back) rather
+    than sliding away; they close eased, like the guard. The resin is
+    drawn on both sides, so a flipped-open dome still shows.
+-   **Key labels:** ARM is engraved above the key, where its head points
+    once turned, and OFF to its right, along the head at rest.
 -   **Bake buttons** rise in their wells and glow faintly when uncovered,
     so they read at console scale. The bake all button lights only while
     the key is at ARM and there is something left to bake.
