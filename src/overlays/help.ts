@@ -12,7 +12,7 @@ const SHORTCUTS: [string, string][] = [
   ['Editor: Esc', 'Close the editor'],
   ['Knob: drag ↕', 'Turn (hold Shift for fine control)'],
   ['Knob: double-click', 'Reset to default'],
-  ['Knob: click', 'Edit its label, name and range on the console display; Esc or click again to stop'],
+  ['Knob: click', 'Edit its name and range on the console display; Esc or click again to stop'],
   ['Knob edit: red button under it', 'Bake the knob into the code at its current value'],
   ['Portal: click', 'Lean in to the portal and knobs; click again or Esc to sit back'],
   ['Portal: drag', 'Mouse input to the shader (iMouse)'],

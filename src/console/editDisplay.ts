@@ -1,52 +1,51 @@
 // The knob edit display (docs/control-board.md): a small screen sunk into
-// the console's left bay, where the knob in edit mode has its settings
-// edited. Powered down, it's dark glass. Fields take keystrokes through an
-// invisible input laid over them on screen, as the in-scene editor does; the
-// display draws the text, selection and caret.
+// the console's left bay, where the knob in edit mode has its name and range
+// edited. Powered down, it's dark glass; it changes pages with the monitors'
+// page change. Fields take keystrokes through an invisible input laid over
+// them on screen, as the in-scene editor does; the display draws the text,
+// selection and caret.
 
 import * as THREE from 'three';
 import { formatValue } from '../knobs/knobs';
-import { CanvasPanel } from '../panels/panel';
+import { PageChange } from '../panels/pageChange';
+import { CanvasPanel, redrawListenerRef } from '../panels/panel';
 import type { KnobRecord } from '../project/schema';
 import type { ProjectStore } from '../project/store';
 import { COLORS, KNOB_EDIT_TINT, MONO } from '../theme';
 
 const PX_PER_UNIT = 300;
-const POWER_ON_S = 0.22;
-const POWER_OFF_S = 0.16;
-/** How long switching knobs takes, the screen shifting over in blocks. */
-const SHIFT_S = 0.34;
-const BLOCK = 24;
 
-type Field = 'label' | 'param' | 'min' | 'max' | 'step';
-const FIELDS: Field[] = ['label', 'param', 'min', 'max', 'step'];
+/** The knob's name (its parameter, and the label on its strip) and range. */
+type Field = 'param' | 'min' | 'max' | 'step';
+const FIELDS: Field[] = ['param', 'min', 'max', 'step'];
 
-/** Where things sit on the screen, in its pixels. */
-const PAD = 26;
-const ROW = 66;
-const rowY = (i: number) => 78 + i * ROW;
+/** Where things sit on the screen, in its pixels, and how big the text is. */
+const PAD = 18;
+const ROW = 78;
+const rowY = (i: number) => 10 + i * ROW;
+const FIELD_H = 60;
+/** Field text and readouts; captions; the header; the hint and error line. */
+const TEXT = 42;
+const CAPTION = 27;
+const HEADER = 34;
+const HINT = 24;
+/** Left of the fields, for their captions; and between MIN and MAX. */
+const CAPTION_W = 92;
+const GAP_W = 64;
+const RESET = { w: 300, h: FIELD_H };
 
 const fieldValue = (k: KnobRecord, f: Field): string => (f === 'param' ? k.param : String(k[f]));
-
-const hash = (i: number) => {
-  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
-  return x - Math.floor(x);
-};
 
 export class EditDisplay extends CanvasPanel {
   readonly group = new THREE.Group();
   private readonly input: HTMLInputElement;
-  /** The knob shown: the one in edit mode, or the last one while powering down. */
+  /** The knob shown: the one in edit mode, or null when the display is off. */
   private shown: KnobRecord | null = null;
-  private power = 0;
-  private powerGoal = 0;
-  /** The previous knob's screen while shifting to the next one. */
-  private shift: { from: HTMLCanvasElement; t: number } | null = null;
+  private readonly pageChange = new PageChange();
   private focus: Field | null = null;
   /** Edited text that didn't commit; kept until it's fixed or reverted. */
   private drafts: Partial<Record<Field, string>> = {};
   private error = '';
-  private last = 0;
 
   constructor(
     private readonly store: ProjectStore,
@@ -57,6 +56,8 @@ export class EditDisplay extends CanvasPanel {
     super({ x: 0, y: 0, w: size.w, h: size.h }, Math.round(size.w * PX_PER_UNIT), Math.round(size.h * PX_PER_UNIT), 0, 0);
     this.material.alphaTest = 0;
     this.material.transparent = false;
+    this.pageChange.resize(this.pixelWidth, this.pixelHeight);
+    this.pageChange.install(this.material, 'page-change-display');
     this.group.add(this.mesh);
 
     this.input = document.createElement('input');
@@ -105,59 +106,34 @@ export class EditDisplay extends CanvasPanel {
     if (this.focus) this.input.blur();
     this.drafts = {};
     this.error = '';
-    if (!id || !next) {
-      this.powerGoal = 0;
-    } else {
-      if (this.power > 0 && this.shown && this.shown.id !== next.id) {
-        // Snapshot the old screen and shift over to the new one.
-        const from = document.createElement('canvas');
-        from.width = this.pixelWidth;
-        from.height = this.pixelHeight;
-        from.getContext('2d')!.drawImage(this.canvas, 0, 0);
-        this.shift = { from, t: 0 };
-      }
-      this.shown = next;
-      this.powerGoal = 1;
-    }
+    // On, off or to another knob: the page change from what shows now.
+    this.pageChange.begin(this.canvas);
+    this.shown = id ? next : null;
     this.invalidate();
   }
 
-  /** Advances the power-up and block-shift animations. */
   override update(): void {
-    const now = performance.now();
-    const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
-    this.last = now;
-    if (this.power !== this.powerGoal) {
-      this.power = this.powerGoal > this.power ? Math.min(1, this.power + dt / POWER_ON_S) : Math.max(0, this.power - dt / POWER_OFF_S);
-      if (this.power === 0) this.shown = null;
-      this.invalidate();
-    }
-    if (this.shift) {
-      this.shift.t += dt / SHIFT_S;
-      if (this.shift.t >= 1) this.shift = null;
-      this.invalidate();
-    }
     if (this.focus) this.placeInput();
     super.update();
+    // The screen changes every frame until the new page settles.
+    if (this.pageChange.tick()) redrawListenerRef()?.(this.mesh);
   }
 
   // --- Fields ---------------------------------------------------------------
 
   private fieldRect(f: Field) {
     const W = this.pixelWidth;
-    const x0 = PAD + 122;
-    const half = (W - x0 - PAD - 116) / 2;
+    const x0 = PAD + CAPTION_W;
+    const half = (W - x0 - PAD - GAP_W) / 2;
     switch (f) {
-      case 'label':
-        return { x: x0, y: rowY(1), w: W - x0 - PAD, h: 50 };
       case 'param':
-        return { x: x0, y: rowY(2), w: W - x0 - PAD, h: 50 };
+        return { x: x0, y: rowY(1), w: W - x0 - PAD, h: FIELD_H };
       case 'min':
-        return { x: x0, y: rowY(3), w: half, h: 50 };
+        return { x: x0, y: rowY(2), w: half, h: FIELD_H };
       case 'max':
-        return { x: W - PAD - half, y: rowY(3), w: half, h: 50 };
+        return { x: W - PAD - half, y: rowY(2), w: half, h: FIELD_H };
       case 'step':
-        return { x: x0, y: rowY(4), w: half, h: 50 };
+        return { x: x0, y: rowY(3), w: half, h: FIELD_H };
     }
   }
 
@@ -182,7 +158,7 @@ export class EditDisplay extends CanvasPanel {
     if (this.focus && this.focus !== f) this.commit();
     this.focus = f;
     this.input.value = this.drafts[f] ?? fieldValue(k, f);
-    this.input.inputMode = f === 'label' || f === 'param' ? 'text' : 'decimal';
+    this.input.inputMode = f === 'param' ? 'text' : 'decimal';
     this.placeInput();
     this.input.focus({ preventScroll: true });
     this.input.select();
@@ -197,7 +173,7 @@ export class EditDisplay extends CanvasPanel {
 
   /** World position of a field's middle, or of RESET VALUE (for tests). */
   pointOf(id: Field | 'reset'): THREE.Vector3 {
-    const r = id === 'reset' ? { x: PAD, y: rowY(6), w: 250, h: 50 } : this.fieldRect(id);
+    const r = id === 'reset' ? { x: PAD, y: rowY(5), ...RESET } : this.fieldRect(id);
     const u = (r.x + r.w / 2) / this.pixelWidth - 0.5;
     const v = 0.5 - (r.y + r.h / 2) / this.pixelHeight;
     return this.mesh.localToWorld(new THREE.Vector3(u * this.rect.w, v * this.rect.h, 0));
@@ -258,12 +234,11 @@ export class EditDisplay extends CanvasPanel {
       return true;
     }
     if (f === 'param') {
+      // One name: the parameter in the code, and the label on the knob's strip.
       const name = text.trim();
       const r = name ? dispatch({ type: 'renameKnob', id: k.id, name }) : { ok: false as const, error: 'The name cannot be empty.' };
       if (!r.ok) return refuse(r.error);
-    } else if (f === 'label') {
-      const r = dispatch({ type: 'updateKnob', id: k.id, patch: { label: text } });
-      if (!r.ok) return refuse(r.error);
+      if (this.knob && this.knob.label !== name) dispatch({ type: 'updateKnob', id: k.id, patch: { label: name } });
     } else {
       const n = Number(text.trim());
       if (!text.trim() || !Number.isFinite(n)) return refuse(`${f.toUpperCase()} must be a number.`);
@@ -284,27 +259,8 @@ export class EditDisplay extends CanvasPanel {
   // --- Drawing --------------------------------------------------------------
 
   protected draw(ctx: CanvasRenderingContext2D): void {
-    const W = this.pixelWidth;
-    const H = this.pixelHeight;
     this.glass(ctx);
-    const k = this.shown;
-    if (k && this.power > 0) {
-      ctx.save();
-      // Powering up: the picture opens from a bright line across the middle.
-      const p = this.power;
-      const open = Math.min(1, p * 1.6);
-      const h = Math.max(2, H * open * open);
-      ctx.beginPath();
-      ctx.rect(0, (H - h) / 2, W, h);
-      ctx.clip();
-      this.page(ctx, k);
-      if (p < 1) {
-        ctx.fillStyle = `rgba(255, 240, 200, ${0.55 * (1 - p)})`;
-        ctx.fillRect(0, 0, W, H);
-      }
-      ctx.restore();
-    }
-    if (this.shift) this.blocks(ctx, this.shift.from, this.shift.t);
+    if (this.shown) this.page(ctx, this.shown);
     this.scanlines(ctx);
   }
 
@@ -312,100 +268,82 @@ export class EditDisplay extends CanvasPanel {
     const W = this.pixelWidth;
     const H = this.pixelHeight;
     const g = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.5, W * 0.75);
-    g.addColorStop(0, this.power > 0 ? '#121410' : '#0b1313');
+    g.addColorStop(0, this.shown ? '#121410' : '#0b1313');
     g.addColorStop(1, '#030606');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
 
   private scanlines(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = this.power > 0 ? 'rgba(0, 0, 0, 0.22)' : 'rgba(120, 160, 160, 0.035)';
+    ctx.fillStyle = this.shown ? 'rgba(0, 0, 0, 0.22)' : 'rgba(120, 160, 160, 0.035)';
     for (let y = 0; y < this.pixelHeight; y += 4) ctx.fillRect(0, y, this.pixelWidth, 1);
-  }
-
-  /** The old screen breaking into blocks that slide off as the new one shows through. */
-  private blocks(ctx: CanvasRenderingContext2D, from: HTMLCanvasElement, t: number) {
-    const cols = Math.ceil(this.pixelWidth / BLOCK);
-    const rows = Math.ceil(this.pixelHeight / BLOCK);
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        const n = j * cols + i;
-        const start = hash(n) * 0.6;
-        const local = Math.min(1, Math.max(0, (t - start) / 0.4));
-        if (local >= 1) continue;
-        const dir = hash(n + 9999) < 0.5 ? -1 : 1;
-        const dx = Math.round(dir * local * local * BLOCK * 3);
-        ctx.drawImage(from, i * BLOCK, j * BLOCK, BLOCK, BLOCK, i * BLOCK + dx, j * BLOCK, BLOCK, BLOCK);
-      }
-    }
   }
 
   private page(ctx: CanvasRenderingContext2D, k: KnobRecord) {
     const W = this.pixelWidth;
     const H = this.pixelHeight;
-    const y = (i: number) => rowY(i) + 25;
+    const y = (i: number) => rowY(i) + FIELD_H / 2;
     ctx.textBaseline = 'middle';
 
     // Header: which knob, its type, and the edit lamp.
     ctx.textAlign = 'left';
-    ctx.font = `700 28px ${MONO}`;
+    ctx.font = `700 ${HEADER}px ${MONO}`;
     ctx.fillStyle = KNOB_EDIT_TINT;
-    ctx.fillText(`KNOB ${k.slot + 1} · ${k.type.toUpperCase()}`, PAD, 38);
+    ctx.fillText(`KNOB ${k.slot + 1} · ${k.type.toUpperCase()}`, PAD, 36);
     ctx.textAlign = 'right';
-    ctx.fillText('EDIT', W - PAD, 38);
+    ctx.fillText('EDIT', W - PAD, 36);
     ctx.beginPath();
-    ctx.arc(W - PAD - ctx.measureText('EDIT').width - 18, 38, 8, 0, Math.PI * 2);
+    ctx.arc(W - PAD - ctx.measureText('EDIT').width - 20, 36, 9, 0, Math.PI * 2);
     ctx.shadowColor = KNOB_EDIT_TINT;
     ctx.shadowBlur = 10;
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.fillStyle = `${KNOB_EDIT_TINT}55`;
-    ctx.fillRect(PAD, 66, W - 2 * PAD, 2);
+    ctx.fillRect(PAD, 66, W - 2 * PAD, 3);
 
     const caption = (text: string, x: number, row: number) => {
       ctx.textAlign = 'left';
-      ctx.font = `600 22px ${MONO}`;
+      ctx.font = `600 ${CAPTION}px ${MONO}`;
       ctx.fillStyle = COLORS.dim;
       ctx.fillText(text, x, y(row));
     };
-    caption('LABEL', PAD, 1);
-    caption('NAME', PAD, 2);
-    caption('MIN', PAD, 3);
-    caption('MAX', this.fieldRect('max').x - 62, 3);
-    caption('STEP', PAD, 4);
+    caption('NAME', PAD, 1);
+    caption('MIN', PAD, 2);
+    caption('MAX', this.fieldRect('max').x - GAP_W + 6, 2);
+    caption('STEP', PAD, 3);
     for (const f of FIELDS) this.field(ctx, k, f);
 
     // Readouts: the value follows the knob live.
-    caption('VALUE', PAD, 5);
-    caption('DEFAULT', this.fieldRect('max').x - 108, 5);
-    ctx.font = `600 28px ${MONO}`;
+    caption('VALUE', PAD, 4);
+    caption('DEF', this.fieldRect('max').x - GAP_W + 6, 4);
+    ctx.font = `600 ${TEXT}px ${MONO}`;
     ctx.fillStyle = COLORS.text;
-    ctx.fillText(formatValue(k, k.value), this.fieldRect('min').x + 10, y(5));
+    ctx.fillText(formatValue(k, k.value), this.fieldRect('min').x + 10, y(4));
     ctx.fillStyle = COLORS.dim;
-    ctx.fillText(formatValue(k, k.default), this.fieldRect('max').x + 10, y(5));
+    ctx.fillText(formatValue(k, k.default), this.fieldRect('max').x + 10, y(4));
 
     // RESET VALUE, an on-screen button.
-    const b = { id: 'reset', x: PAD, y: rowY(6), w: 250, h: 50 };
+    const b = { id: 'reset', x: PAD, y: rowY(5), ...RESET };
     this.addButton(b);
     const hot = this.hoverButton === 'reset';
     ctx.beginPath();
     ctx.roundRect(b.x, b.y, b.w, b.h, 6);
     ctx.fillStyle = hot ? `${KNOB_EDIT_TINT}33` : 'transparent';
     ctx.fill();
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = hot ? KNOB_EDIT_TINT : `${KNOB_EDIT_TINT}88`;
     ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.font = `700 22px ${MONO}`;
+    ctx.font = `700 ${CAPTION}px ${MONO}`;
     ctx.fillStyle = hot ? KNOB_EDIT_TINT : `${KNOB_EDIT_TINT}cc`;
     ctx.fillText('RESET VALUE', b.x + b.w / 2, b.y + b.h / 2 + 1);
 
     // The bottom line: errors from the store, or a hint.
     ctx.textAlign = 'left';
-    ctx.font = `600 18px ${MONO}`;
-    ctx.fillStyle = this.error ? COLORS.error : COLORS.faint;
-    const msg = this.error || (this.focus ? 'ENTER/TAB NEXT · ESC REVERT' : 'CLICK A FIELD TO EDIT');
-    ctx.fillText(this.fit(ctx, msg, W - 2 * PAD), PAD, H - 24);
+    ctx.font = `600 ${HINT}px ${MONO}`;
+    ctx.fillStyle = this.error ? COLORS.error : COLORS.dim;
+    const msg = this.error || (this.focus ? 'ENTER NEXT · ESC REVERT' : 'CLICK A FIELD TO EDIT');
+    ctx.fillText(this.fit(ctx, msg, W - 2 * PAD), PAD, H - 30);
   }
 
   private field(ctx: CanvasRenderingContext2D, k: KnobRecord, f: Field) {
@@ -419,7 +357,7 @@ export class EditDisplay extends CanvasPanel {
     ctx.roundRect(r.x, r.y, r.w, r.h, 4);
     ctx.fillStyle = focused ? '#1a1a10' : '#0b0e0c';
     ctx.fill();
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = focused ? KNOB_EDIT_TINT : draft !== undefined ? COLORS.error : hot ? `${KNOB_EDIT_TINT}88` : '#2a3330';
     ctx.stroke();
 
@@ -427,7 +365,7 @@ export class EditDisplay extends CanvasPanel {
     ctx.beginPath();
     ctx.rect(r.x + 4, r.y, r.w - 8, r.h);
     ctx.clip();
-    ctx.font = `600 28px ${MONO}`;
+    ctx.font = `600 ${TEXT}px ${MONO}`;
     ctx.textAlign = 'left';
     const tx = r.x + 10;
     const ty = r.y + r.h / 2 + 1;

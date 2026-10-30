@@ -115,21 +115,22 @@ rolls down into the face, and the glass sits below the console surface.
 **Off.** With no knob in edit mode the display is dark glass, showing
 only reflections and a faint scanline texture, like a powered-down CRT.
 
-**On.** Entering edit mode powers it up (a quick brightening from the
-center, the [block-shift transition](no-modals.md#monitor-pages-and-transitions)
-on later switches between knobs) and shows:
+**On.** Entering edit mode brings the knob's page up with the monitors'
+[page change](no-modals.md#monitor-pages-and-transitions), as do
+switching knobs and leaving edit mode. It shows:
 
 ```
 KNOB 3 · FLOAT            ● edit
-LABEL   speed_____________
-NAME    speed
+NAME    speed_____________
 MIN     0.000   MAX   4.000
 STEP    0.010
 VALUE   1.250   DEFAULT 1.000
 [ RESET VALUE ]
 ```
 
--   **LABEL, NAME, MIN, MAX, STEP** are editable fields. Clicking a
+-   **NAME, MIN, MAX, STEP** are editable fields. There is one name:
+    renaming the knob renames its parameter in the code and sets the
+    label on its strip to match. Clicking a
     field focuses it: the field is drawn with a yellow outline and a
     caret, and keystrokes go to an invisible input layer placed over the
     field's screen bounds (the same technique as the in-scene editor,
@@ -283,9 +284,11 @@ loading a project or undoing resets them correctly.
 -   **Holes in the face.** The display, the bubble wells and the bake all
     well are cut out of the console's face texture, and its hit test lets
     the pointer through them to what's sunk below.
--   **Block-shift.** Switching knobs shifts the display in blocks drawn on
-    its own canvas, not the shader transition planned in
-    [No modals](no-modals.md#monitor-pages-and-transitions).
+-   **Page change.** The display turns on, off and switches knobs with the
+    monitors' page change (`src/panels/pageChange.ts`), the same block
+    shift the library uses for its confirm page.
+-   **One name field.** LABEL and NAME are merged into NAME, which sets
+    both the parameter and the strip's label.
 -   **Bake buttons** rise in their wells and glow faintly when uncovered,
     so they read at console scale. The bake all button lights only while
     the key is at ARM and there is something left to bake.

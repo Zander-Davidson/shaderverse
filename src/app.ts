@@ -406,7 +406,7 @@ export function startApp(root: HTMLElement): void {
       bakeKeyPoint: () => screenPoint(controls.board.key.key.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas),
       bakeAllPoint: () => screenPoint(controls.board.bakeAll.button.getWorldPosition(new THREE.Vector3()), cockpit.camera, canvas),
       /** Screen point of a field (or RESET VALUE) on the knob edit display. */
-      displayPoint: (id: string) => screenPoint(controls.board.display.screen.pointOf(id as 'label'), cockpit.camera, canvas),
+      displayPoint: (id: string) => screenPoint(controls.board.display.screen.pointOf(id as 'param'), cockpit.camera, canvas),
       bounds: overlayBounds,
       /** Screen point of a button on the library monitor, by id. */
       libraryPoint: (id: string) => {
