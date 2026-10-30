@@ -2,13 +2,14 @@
 
 *Part of the [Shaderverse design docs](README.md).*
 
-**Status:** design. Reworks the hanging control console from
-[The hanging rig](hanging-rig.md) so that knobs are edited and baked
-without a popover, following [No modals](no-modals.md).
+**Status:** built (see [As built](#as-built) for where it differs).
+Reworks the hanging control console from [The hanging rig](hanging-rig.md)
+so that knobs are edited and baked without a popover, following
+[No modals](no-modals.md).
 
-Today, clicking a knob opens a flat popover beside it with the knob's
-label, name, range and step, and a "Delete (bake)" button. The popover
-goes away. In its place the console gains three physical features:
+Before this, clicking a knob opened a flat popover beside it with the
+knob's label, name, range and step, and a "Delete (bake)" button. The
+popover is gone. In its place the console gains three physical features:
 
 -   A **knob edit display** recessed into the console, left of the
     knobs, where one knob's settings are edited.
@@ -265,6 +266,31 @@ loading a project or undoing resets them correctly.
     replaced by its value in the code; turn the key, check knobs ignore
     drags, press bake all, see a shader with no knob parameters that
     renders the same image.
+
+## As built
+
+-   **Size.** The console is 10.7 panel units wide (from 7.2), with the
+    knob row `ROW_X` right of its center, and hangs at a smaller scale
+    (0.33, from 0.43) so it clears the code and library monitors. The
+    knobs are about a quarter smaller on screen sitting back.
+-   **Leaning in** frames the whole console, bays included, so the knobs
+    grow less than before (about 1.3× rather than 1.5×). The side
+    monitors now stay in view, and the companion's leaned-in perches
+    moved into the gaps between them and the portal.
+-   **Holes in the face.** The display, the bubble wells and the bake all
+    well are cut out of the console's face texture, and its hit test lets
+    the pointer through them to what's sunk below.
+-   **Block-shift.** Switching knobs shifts the display in blocks drawn on
+    its own canvas, not the shader transition planned in
+    [No modals](no-modals.md#monitor-pages-and-transitions).
+-   **Bake buttons** rise in their wells and glow faintly when uncovered,
+    so they read at console scale. The bake all button lights only while
+    the key is at ARM and there is something left to bake.
+-   **Baked caps** sink into the face and come back up bare; after a bake
+    all they go left to right, 70 ms apart.
+-   **The charm** hangs on a chain that can go slack, long enough to clear
+    the lock body and rest on the face below the key. It sleeps once it
+    has been still for half a second.
 
 ## Open questions
 

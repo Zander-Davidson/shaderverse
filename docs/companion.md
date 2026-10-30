@@ -156,7 +156,7 @@ the monitors, console and arms become the keep-out zones.)
 -   **Keep-out zones**, computed from the layout (`src/cockpit/layout.ts`):
     every panel rectangle, the portal bezel (`bezelRadius`), every knob
     slot, the tubing between the source panels and the knobs, and the
-    screen rectangles of any open overlay (editor, knob popover, help).
+    screen rectangles of any open overlay (editor, help).
     Each keeps a margin.
 -   **Perches:** each view has a short, ordered list of candidate perches
     tuned by eye in the dev tuning panel. The companion takes the first

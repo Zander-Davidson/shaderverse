@@ -199,16 +199,16 @@ class KnobCap {
   /** Seconds into a retraction (sinking into the face and rising back bare), or null. */
   private retracting: number | null = null;
 
-  /** Sinks into the face and comes back up bare: its knob was baked. */
-  retract() {
-    this.retracting = 0;
+  /** Sinks into the face and comes back up bare, after `delay` seconds: its knob was baked. */
+  retract(delay = 0) {
+    this.retracting = -delay;
   }
 
   /** Advances a retraction; true while it moves. */
   tick(dt: number): boolean {
     if (this.retracting === null) return false;
     this.retracting += dt;
-    const t = this.retracting;
+    const t = Math.max(0, this.retracting);
     const DOWN = 0.18;
     const HOLD = 0.12;
     const UP = 0.3;
@@ -282,9 +282,10 @@ export class KnobSlot implements PointerTarget {
     this.face.invalidate();
   }
 
-  setKnob(k: KnobRecord | null) {
+  /** `retractDelay`: when the knob goes, how long its cap waits to retract (a bake all goes left to right). */
+  setKnob(k: KnobRecord | null, retractDelay = 0) {
     const prev = this.face.knob;
-    if (prev && !k) this.cap.retract();
+    if (prev && !k) this.cap.retract(retractDelay);
     this.face.knob = k;
     if (this.cap.pivot.visible !== !!k) redrawListener.call(this.cap.group);
     this.cap.setAssigned(!!k);
@@ -406,9 +407,10 @@ export class KnobBank {
     }
     const sync = () => {
       const { project, ui } = store.getState();
+      let gone = 0;
       for (const s of this.slots) {
         const k = project.knobs.find((x) => x.slot === s.slot) ?? null;
-        s.setKnob(k);
+        s.setKnob(k, s.knob && !k ? 0.07 * gone++ : 0);
         s.setMode(!!k && k.id === ui.editKnobId, ui.bakeArmed);
       }
     };
