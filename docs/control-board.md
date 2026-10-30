@@ -217,7 +217,10 @@ Entered and left only with the BAKE key.
     left to right, in quick succession.
 -   **After baking,** the console stays in bake all mode (the key is
     still at ARM) with nothing left to bake: the button stays exposed
-    but goes dark. Turning the key back closes the bubble. See
+    but goes dark. Turning the key back closes the bubble.
+-   **Adding a knob** while armed (making one from a literal, typing a
+    parameter into the signature, or undoing a bake) turns the key back
+    to OFF on its own, returning the console to normal. See
     [Open questions](#open-questions).
 -   **The bake all button is clickable only in this mode.** With the
     bubble closed, it is not a pointer target.
